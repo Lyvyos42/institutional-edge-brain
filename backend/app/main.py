@@ -4,7 +4,12 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config import settings
-from app.api.routes import auth, signals, market, backtest, admin
+try:
+    from app.api.routes import auth, signals, market, backtest, admin
+except Exception as _import_err:
+    import traceback, sys
+    traceback.print_exc()
+    sys.exit(f"FATAL: failed to import routes — {_import_err}")
 
 log = structlog.get_logger()
 
