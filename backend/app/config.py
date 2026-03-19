@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     frontend_url:          str = "http://localhost:3000"
     from_email:            str = "noreply@quantneuraledge.com"
     free_daily_limit:      int = 10
+    google_client_id:      str = ""
 
     # kept for backward compat
     @property

@@ -28,6 +28,10 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMPTZ",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_analyses INTEGER DEFAULT 0",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_reset_date DATE",
+            "ALTER TABLE users ALTER COLUMN hashed_password DROP NOT NULL",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS magic_token VARCHAR",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS magic_token_expires TIMESTAMPTZ",
         ]
         async with engine.begin() as conn:
             for stmt in migration_stmts:

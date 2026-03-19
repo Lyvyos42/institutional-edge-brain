@@ -13,7 +13,8 @@
     "react-dom": "^18",
     "lucide-react": "^0.400.0",
     "clsx": "^2.1.1",
-    "lightweight-charts": "^4.2.0"
+    "lightweight-charts": "^4.2.0",
+    "@react-oauth/google": "^0.12.1"
   },
   "devDependencies": {
     "typescript": "^5",
