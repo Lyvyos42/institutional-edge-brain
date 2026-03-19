@@ -36,8 +36,8 @@ export default function RegisterPage() {
       if (!res.ok) { setError(data.detail || "Registration failed"); return; }
       saveAuth(data);
       router.replace("/dashboard");
-    } catch {
-      setError("Connection error");
+    } catch (err: any) {
+      setError(`Connection error — cannot reach ${API} (${err?.message || "network failure"})`);
     } finally {
       setLoading(false);
     }
@@ -62,8 +62,8 @@ export default function RegisterPage() {
         if (!res.ok) { setError(data.detail || "Google sign-up failed"); return; }
         saveAuth(data);
         router.replace("/dashboard");
-      } catch {
-        setError("Google login error");
+      } catch (err: any) {
+        setError(`Google login error — cannot reach ${API} (${err?.message || "network failure"})`);
       } finally {
         setLoading(false);
       }
