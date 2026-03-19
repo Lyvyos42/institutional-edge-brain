@@ -106,34 +106,130 @@ def run_all_modules(df: pd.DataFrame, symbol: str) -> dict:
     return results
 
 
+_SIGNAL_ALIASES = {
+    "BULLISH": "BUY", "LONG": "BUY", "HIGH": "BUY",
+    "BULLISH_REVERSAL": "BUY", "ACCUMULATION": "BUY",
+    "BEARISH": "SELL", "SHORT": "SELL", "BEARISH_REVERSAL": "SELL",
+    "DISTRIBUTION": "SELL",
+    "WAIT": "NEUTRAL", "AVOID": "NEUTRAL", "CHOPPY_AVOID": "NEUTRAL",
+    "LOW": "NEUTRAL", "MODERATE": "NEUTRAL", "RANGE_TRADING": "NEUTRAL",
+    "MEAN_REVERSION": "NEUTRAL", "TRENDING": "NEUTRAL", "HOLD": "NEUTRAL",
+}
+
+# Module-specific extractors — called before generic fallback
+_MODULE_EXTRACTORS = {
+    "entropy": lambda r: {
+        "signal": _resolve_signal(r.get("signal", "NEUTRAL")),
+        "value": float(r.get("entropy_score", r.get("shannon", 0.0)) or 0.0),
+        "label": str(r.get("signal", "—")),
+        "detail": f"Hurst={r.get('hurst',0):.2f} chaos={r.get('is_chaos',False)} ghost={r.get('is_ghost_algo',False)}",
+    },
+    "vpin": lambda r: {
+        "signal": _resolve_signal(r.get("direction_hint", r.get("signal", "NEUTRAL"))),
+        "value": float(r.get("vpin", 0.0) or 0.0),
+        "label": str(r.get("signal", "—")),
+        "detail": f"VPIN={r.get('vpin',0):.3f} toxicity={r.get('is_high_toxicity',False)} smart={r.get('smart_money_active',False)}",
+    },
+    "vol_accum": lambda r: {
+        "signal": _resolve_signal(r.get("signal", "NEUTRAL")),
+        "value": float(r.get("accumulation_score", r.get("score", 0.0)) or 0.0),
+        "label": str(r.get("pattern", r.get("signal", "—"))),
+        "detail": str(r.get("interpretation", r.get("detail", "")))[:150],
+    },
+    "fix_time": lambda r: {
+        "signal": _resolve_signal(r.get("signal", "NEUTRAL")),
+        "value": float(r.get("strength", r.get("score", 0.0)) or 0.0),
+        "label": str(r.get("signal", "—")),
+        "detail": str(r.get("detail", r.get("reason", "")))[:150],
+    },
+    "month_flow": lambda r: {
+        "signal": _resolve_signal(r.get("signal", "NEUTRAL")),
+        "value": float(r.get("strength", r.get("score", 0.0)) or 0.0),
+        "label": str(r.get("signal", "—")),
+        "detail": str(r.get("detail", r.get("reason", "")))[:150],
+    },
+    "iceberg": lambda r: {
+        "signal": _resolve_signal(r.get("signal", "NEUTRAL")),
+        "value": float(r.get("confidence", r.get("score", 0.0)) or 0.0),
+        "label": str(r.get("signal", "—")),
+        "detail": str(r.get("detail", r.get("interpretation", "")))[:150],
+    },
+    "cot": lambda r: {
+        "signal": _resolve_signal(r.get("signal", "NEUTRAL")),
+        "value": float(r.get("net_position", r.get("score", 0.0)) or 0.0),
+        "label": str(r.get("signal", "—")),
+        "detail": str(r.get("detail", r.get("interpretation", "")))[:150],
+    },
+    "correlation": lambda r: {
+        "signal": _resolve_signal(r.get("signal", "NEUTRAL")),
+        "value": float(r.get("score", r.get("strength", 0.0)) or 0.0),
+        "label": str(r.get("signal", "—")),
+        "detail": str(r.get("detail", r.get("interpretation", "")))[:150],
+    },
+    "vol_profile": lambda r: {
+        "signal": _resolve_signal(r.get("signal", "NEUTRAL")),
+        "value": float(r.get("vpoc", r.get("value_area_low", 0.0)) or 0.0),
+        "label": str(r.get("signal", "—")),
+        "detail": str(r.get("detail", r.get("interpretation", "")))[:150],
+    },
+    "stop_run": lambda r: {
+        "signal": _resolve_signal(r.get("signal", "NEUTRAL")),
+        "value": float(r.get("score", r.get("strength", 0.0)) or 0.0),
+        "label": str(r.get("signal", "—")),
+        "detail": str(r.get("detail", r.get("interpretation", "")))[:150],
+    },
+    "sweep": lambda r: {
+        "signal": _resolve_signal(r.get("primary_signal", r.get("signal", "NEUTRAL"))),
+        "value": float(r.get("confidence", r.get("aggression_score", 0.0)) or 0.0),
+        "label": str(r.get("primary_signal", "—")),
+        "detail": f"conf={r.get('confidence',0):.2f} aggr={r.get('aggression_score',0):.2f}",
+    },
+    "volatility": lambda r: {
+        "signal": _resolve_signal(r.get("signal", "NEUTRAL")),
+        "value": float(r.get("atr_value", 0.0) or 0.0),
+        "label": str(r.get("signal", "—")),
+        "detail": str(r.get("recommendation", ""))[:150],
+    },
+}
+
+
+def _resolve_signal(raw_signal: str) -> str:
+    s = str(raw_signal).upper().strip()
+    return _SIGNAL_ALIASES.get(s, "NEUTRAL" if s not in ("BUY", "SELL", "NEUTRAL") else s)
+
+
 def _normalize_module_result(name: str, raw) -> dict:
-    """Normalize any module output format into {signal, value, label, detail}."""
+    """Normalize module output into {signal, value, label, detail}."""
     if raw is None:
         return {"signal": "NEUTRAL", "value": 0.0, "label": "—", "detail": "no data"}
 
     if isinstance(raw, dict):
-        signal = str(raw.get("signal", raw.get("direction", raw.get("bias", "NEUTRAL")))).upper()
-        if signal not in ("BUY", "SELL", "BULLISH", "BEARISH", "LONG", "SHORT", "NEUTRAL", "WAIT", "AVOID"):
-            signal = "NEUTRAL"
-        if signal in ("BULLISH", "LONG"):
-            signal = "BUY"
-        if signal in ("BEARISH", "SHORT"):
-            signal = "SELL"
-        if signal in ("WAIT", "AVOID"):
-            signal = "NEUTRAL"
-
-        value = float(raw.get("value", raw.get("score", raw.get("strength", raw.get("level", 0.0))) or 0.0))
-        label = str(raw.get("label", raw.get("status", raw.get("regime", signal))))
-        detail = str(raw.get("detail", raw.get("reason", raw.get("message", raw.get("interpretation", "")))))
+        # Use module-specific extractor if available
+        extractor = _MODULE_EXTRACTORS.get(name)
+        if extractor:
+            try:
+                result = extractor(raw)
+                return result
+            except Exception:
+                pass
+        # Generic fallback
+        sig_raw = raw.get("signal", raw.get("direction", raw.get("bias", "NEUTRAL")))
+        signal = _resolve_signal(str(sig_raw))
+        value = 0.0
+        for k in ("value", "score", "strength", "level", "confidence", "entropy_score", "vpin"):
+            v = raw.get(k)
+            if v is not None:
+                try:
+                    value = float(v)
+                    break
+                except (TypeError, ValueError):
+                    pass
+        label = str(raw.get("label", raw.get("status", raw.get("signal", signal))))
+        detail = str(raw.get("detail", raw.get("reason", raw.get("recommendation", raw.get("interpretation", "")))))
         return {"signal": signal, "value": round(value, 4), "label": label, "detail": detail[:200]}
 
     if isinstance(raw, (tuple, list)) and len(raw) >= 2:
-        return {
-            "signal": str(raw[0]).upper(),
-            "value": float(raw[1]) if isinstance(raw[1], (int, float)) else 0.0,
-            "label": str(raw[0]),
-            "detail": "",
-        }
+        return {"signal": _resolve_signal(str(raw[0])), "value": float(raw[1]) if isinstance(raw[1], (int, float)) else 0.0, "label": str(raw[0]), "detail": ""}
 
     if isinstance(raw, (int, float)):
         signal = "BUY" if raw > 0.3 else ("SELL" if raw < -0.3 else "NEUTRAL")
