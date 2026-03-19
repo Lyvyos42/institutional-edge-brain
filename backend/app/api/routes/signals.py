@@ -1,10 +1,15 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import settings
 from app.db.database import get_db
 from app.models.signal import BrainSignal
-from app.auth.jwt import get_optional_user
+from app.models.user import User as UserModel
+from app.auth.jwt import get_current_user, get_optional_user
 from app.brain.runner import analyze_symbol
 
 router = APIRouter(prefix="/api/signals", tags=["signals"])
@@ -21,13 +26,35 @@ class AnalyzeRequest(BaseModel):
 async def analyze(
     body: AnalyzeRequest,
     db: AsyncSession = Depends(get_db),
-    user: dict | None = Depends(get_optional_user),
+    user: dict = Depends(get_current_user),
 ):
     if body.timeframe not in VALID_TIMEFRAMES:
         raise HTTPException(400, f"Invalid timeframe. Choose: {VALID_TIMEFRAMES}")
     symbol = body.symbol.upper().strip()
     if len(symbol) > 20 or not all(c.isalnum() or c in "=-^/" for c in symbol):
         raise HTTPException(400, "Invalid symbol")
+
+    # ── Tier enforcement ──────────────────────────────────────────────────────
+    if user is None:
+        raise HTTPException(401, "Authentication required to run analysis")
+
+    if user["tier"] == "free":
+        # Check and enforce daily limit
+        result = await db.execute(select(UserModel).where(UserModel.id == user["sub"]))
+        db_user = result.scalar_one_or_none()
+        if db_user:
+            today = date.today()
+            if db_user.daily_reset_date != today:
+                db_user.daily_analyses   = 0
+                db_user.daily_reset_date = today
+            if db_user.daily_analyses >= settings.free_daily_limit:
+                raise HTTPException(
+                    429,
+                    f"Daily limit reached ({settings.free_daily_limit} analyses/day on free tier). "
+                    "Upgrade to Pro for unlimited access.",
+                )
+            db_user.daily_analyses += 1
+            await db.commit()
 
     result = await analyze_symbol(symbol, body.timeframe)
     if "error" in result:

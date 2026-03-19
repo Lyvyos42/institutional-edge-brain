@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { analyze, type AnalysisResult } from "@/lib/api";
+import { getToken, getEmail as getStoredEmail, logout as doLogout } from "@/lib/auth";
 
 const SYMBOLS: Record<string, string[]> = {
   "Forex":   ["EURUSD","GBPUSD","USDJPY","AUDUSD","USDCAD","USDCHF","NZDUSD","EURGBP","EURJPY","GBPJPY"],
@@ -245,14 +246,12 @@ export default function Dashboard() {
   const [activityLog, setActivityLog] = useState<string[]>([]);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("ieb_token");
-      if (!token) {
-        router.replace("/login");
-        return;
-      }
-      setEmail(localStorage.getItem("ieb_email") || "");
+    const token = getToken();
+    if (!token) {
+      router.replace("/login");
+      return;
     }
+    setEmail(getStoredEmail());
   }, [router]);
 
   const addLog = useCallback((msg: string) => {
@@ -323,9 +322,12 @@ export default function Dashboard() {
           <a href="/backtest" style={{ color: "#2563ff", fontSize: "0.7rem", textDecoration: "none", border: "1px solid rgba(37,99,255,0.35)", padding: "4px 12px", borderRadius: 5, letterSpacing: "0.08em" }}>
             BACKTEST
           </a>
+          <a href="/account" style={{ color: "#64748b", fontSize: "0.7rem", textDecoration: "none", border: "1px solid rgba(255,255,255,0.08)", padding: "4px 12px", borderRadius: 5, letterSpacing: "0.08em" }}>
+            ACCOUNT
+          </a>
           <span style={{ color: "#334155", fontSize: "0.7rem" }}>{email}</span>
           <button
-            onClick={() => { localStorage.clear(); router.replace("/login"); }}
+            onClick={() => { doLogout(); router.replace("/login"); }}
             style={{ background: "none", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", fontSize: "0.7rem", padding: "4px 10px", borderRadius: 5, cursor: "pointer", fontFamily: "inherit" }}
           >
             LOGOUT

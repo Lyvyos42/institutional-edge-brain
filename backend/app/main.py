@@ -17,6 +17,25 @@ async def lifespan(app: FastAPI):
         import app.models.signal
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+
+        # Add new columns to existing databases (idempotent)
+        from sqlalchemy import text
+        migration_stmts = [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS refresh_token VARCHAR",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS refresh_token_expires TIMESTAMPTZ",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMPTZ",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_analyses INTEGER DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_reset_date DATE",
+        ]
+        async with engine.begin() as conn:
+            for stmt in migration_stmts:
+                try:
+                    await conn.execute(text(stmt))
+                except Exception:
+                    pass  # SQLite doesn't support IF NOT EXISTS — ignore
+
         log.info("db_ready")
     except Exception as e:
         log.error("db_init_failed", error=str(e))

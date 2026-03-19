@@ -1,97 +1,86 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { register } from "@/lib/api";
+import { saveAuth } from "@/lib/auth";
+
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+const C = {
+  bg: "#06060f", surface: "#0d0d1a", border: "#1a1a2e",
+  accent: "#2563ff", green: "#00c896", red: "#ff4466",
+  text: "#e2e8f0", muted: "#64748b",
+};
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [confirm,  setConfirm]  = useState("");
+  const [error,    setError]    = useState("");
+  const [loading,  setLoading]  = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError("");
+    if (password.length < 8) { setError("Password must be at least 8 characters"); return; }
+    if (password !== confirm) { setError("Passwords do not match"); return; }
+    setLoading(true);
     try {
-      const data = await register(email, password);
-      localStorage.setItem("ieb_token", data.access_token);
-      localStorage.setItem("ieb_email", data.email);
-      localStorage.setItem("ieb_tier", data.tier);
-      router.push("/dashboard");
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Registration failed");
+      const res = await fetch(`${API}/api/auth/register`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.detail || "Registration failed"); return; }
+      saveAuth(data);
+      router.replace("/dashboard");
+    } catch {
+      setError("Connection error");
     } finally {
       setLoading(false);
     }
-  }
+  };
+
+  const fields: { label: string; value: string; set: (v: string) => void; type: string }[] = [
+    { label: "EMAIL",            value: email,    set: setEmail,    type: "email"    },
+    { label: "PASSWORD",         value: password, set: setPassword, type: "password" },
+    { label: "CONFIRM PASSWORD", value: confirm,  set: setConfirm,  type: "password" },
+  ];
 
   return (
-    <main style={{ minHeight: "100vh", background: "#06060f", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div style={{ width: "100%", maxWidth: 420 }}>
-        {/* Logo */}
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ width: 48, height: 48, borderRadius: 12, background: "rgba(0,212,255,0.1)", border: "1px solid rgba(0,212,255,0.3)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
-            <svg width={24} height={24} viewBox="0 0 32 32" fill="none">
-              <circle cx="16" cy="16" r="6" fill="#00d4ff" opacity="0.9"/>
-              <circle cx="16" cy="16" r="12" stroke="#00d4ff" strokeWidth="1" opacity="0.3"/>
-              {[0, 120, 240].map((deg, i) => (
-                <circle key={i}
-                  cx={16 + 12 * Math.cos(deg * Math.PI / 180)}
-                  cy={16 + 12 * Math.sin(deg * Math.PI / 180)}
-                  r="2.5" fill="#7c3aed" opacity="0.8"
-                />
-              ))}
-            </svg>
-          </div>
-          <h1 style={{ color: "#fff", fontWeight: 800, fontSize: "1.3rem", margin: "0 0 4px" }}>Create Account</h1>
-          <p style={{ color: "#475569", fontSize: "0.82rem", margin: 0 }}>Institutional Edge Brain</p>
-        </div>
+    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "monospace" }}>
+      <div style={{ width: 380, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 40 }}>
+        <div style={{ color: C.accent, fontWeight: 700, fontSize: 15, letterSpacing: 2, marginBottom: 4 }}>INSTITUTIONAL EDGE BRAIN</div>
+        <div style={{ color: C.muted, fontSize: 11, marginBottom: 32 }}>Create your account</div>
 
-        <form onSubmit={handleSubmit} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 16, padding: 28, display: "flex", flexDirection: "column", gap: 16 }}>
-          <div>
-            <label style={{ display: "block", color: "#94a3b8", fontSize: "0.75rem", fontWeight: 600, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.08em" }}>Email</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              style={{ width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#e2e8f0", fontSize: "0.9rem", padding: "10px 14px", outline: "none", boxSizing: "border-box", fontFamily: "inherit" }}
-            />
-          </div>
-          <div>
-            <label style={{ display: "block", color: "#94a3b8", fontSize: "0.75rem", fontWeight: 600, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.08em" }}>Password</label>
-            <input
-              type="password"
-              required
-              minLength={6}
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="Min. 6 characters"
-              style={{ width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#e2e8f0", fontSize: "0.9rem", padding: "10px 14px", outline: "none", boxSizing: "border-box", fontFamily: "inherit" }}
-            />
-          </div>
-          {error && (
-            <p style={{ color: "#f72585", fontSize: "0.82rem", margin: 0 }}>{error}</p>
-          )}
-          <button
-            type="submit"
-            disabled={loading}
-            style={{ background: "linear-gradient(135deg,#00d4ff,#7c3aed)", color: "#fff", fontWeight: 700, fontSize: "0.9rem", padding: "11px", borderRadius: 8, border: "none", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, fontFamily: "inherit" }}
-          >
-            {loading ? "Creating account..." : "Create Account"}
+        <form onSubmit={handleSubmit}>
+          {fields.map(({ label, value, set, type }) => (
+            <label key={label} style={{ display: "block", marginBottom: 16 }}>
+              <div style={{ color: C.muted, fontSize: 11, marginBottom: 6, letterSpacing: 1 }}>{label}</div>
+              <input type={type} value={value} onChange={e => set(e.target.value)} required
+                style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, color: C.text,
+                         padding: "10px 12px", borderRadius: 6, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} />
+            </label>
+          ))}
+
+          <div style={{ color: C.muted, fontSize: 10, marginBottom: 20 }}>Minimum 8 characters · Free tier: 10 analyses/day</div>
+
+          {error && <div style={{ color: C.red, fontSize: 12, marginBottom: 16, padding: "8px 12px", background: "#ff446611", borderRadius: 6, border: `1px solid ${C.red}33` }}>{error}</div>}
+
+          <button type="submit" disabled={loading}
+            style={{ width: "100%", background: C.accent, color: "#fff", border: "none", padding: "12px",
+                     borderRadius: 6, fontSize: 13, fontWeight: 700, letterSpacing: 1, cursor: loading ? "not-allowed" : "pointer",
+                     opacity: loading ? 0.7 : 1, fontFamily: "monospace" }}>
+            {loading ? "CREATING ACCOUNT..." : "CREATE ACCOUNT"}
           </button>
-          <p style={{ textAlign: "center", color: "#475569", fontSize: "0.82rem", margin: 0 }}>
-            Already have an account?{" "}
-            <Link href="/login" style={{ color: "#00d4ff", textDecoration: "none" }}>
-              Sign in
-            </Link>
-          </p>
         </form>
+
+        <div style={{ marginTop: 24, textAlign: "center", fontSize: 12, color: C.muted }}>
+          Already have an account?{" "}
+          <a href="/login" style={{ color: C.accent, textDecoration: "none" }}>Sign in</a>
+        </div>
       </div>
-    </main>
+    </div>
   );
 }
