@@ -71,7 +71,17 @@ app.include_router(admin.router)
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "version": "2.0.0", "modules": 12}
+    from app.db.database import engine
+    from sqlalchemy import text
+    db_ok = False
+    db_err = ""
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1 FROM users LIMIT 1"))
+        db_ok = True
+    except Exception as e:
+        db_err = str(e)
+    return {"status": "healthy", "version": "2.0.0", "modules": 12, "db": db_ok, "db_err": db_err}
 
 
 @app.exception_handler(Exception)
