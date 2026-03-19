@@ -8,6 +8,7 @@ passlib[bcrypt]==1.7.4
 python-multipart==0.0.12
 structlog==24.4.0
 httpx==0.27.2
+tvDatafeed
 yfinance==0.2.48
 numpy==1.26.4
 pandas==2.2.3

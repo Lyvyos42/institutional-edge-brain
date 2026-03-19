@@ -320,6 +320,9 @@ export default function Dashboard() {
           </span>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
+          <a href="/backtest" style={{ color: "#2563ff", fontSize: "0.7rem", textDecoration: "none", border: "1px solid rgba(37,99,255,0.35)", padding: "4px 12px", borderRadius: 5, letterSpacing: "0.08em" }}>
+            BACKTEST
+          </a>
           <span style={{ color: "#334155", fontSize: "0.7rem" }}>{email}</span>
           <button
             onClick={() => { localStorage.clear(); router.replace("/login"); }}

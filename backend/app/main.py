@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config import settings
-from app.api.routes import auth, signals, market
+from app.api.routes import auth, signals, market, backtest
 
 log = structlog.get_logger()
 
@@ -37,6 +37,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(signals.router)
 app.include_router(market.router)
+app.include_router(backtest.router)
 
 
 @app.get("/health")
