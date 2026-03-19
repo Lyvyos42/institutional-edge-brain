@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config import settings
-from app.api.routes import auth, signals, market, backtest
+from app.api.routes import auth, signals, market, backtest, admin
 
 log = structlog.get_logger()
 
@@ -61,6 +61,7 @@ app.include_router(auth.router)
 app.include_router(signals.router)
 app.include_router(market.router)
 app.include_router(backtest.router)
+app.include_router(admin.router)
 
 
 @app.get("/health")

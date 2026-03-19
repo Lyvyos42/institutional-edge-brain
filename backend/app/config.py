@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     from_email:            str = "noreply@quantneuraledge.com"
     free_daily_limit:      int = 10
     google_client_id:      str = ""
+    admin_secret:          str = ""
 
     # kept for backward compat
     @property
