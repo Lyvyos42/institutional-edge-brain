@@ -1,0 +1,30 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; }
+html, body { background: #06060f; color: #e2e8f0; font-family: 'JetBrains Mono', monospace; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: #06060f; }
+::-webkit-scrollbar-thumb { background: #1a1a2e; border-radius: 2px; }
+
+/* Glow effects */
+.glow-primary { box-shadow: 0 0 20px rgba(0, 212, 255, 0.3); }
+.glow-bull { box-shadow: 0 0 20px rgba(0, 245, 160, 0.3); }
+.glow-bear { box-shadow: 0 0 20px rgba(247, 37, 133, 0.3); }
+
+/* Pulse animation */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.pulse { animation: pulse-glow 2s ease-in-out infinite; }
+
+/* Neural node animation */
+@keyframes node-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.7; }
+  50% { transform: scale(1.15); opacity: 1; }
+}
