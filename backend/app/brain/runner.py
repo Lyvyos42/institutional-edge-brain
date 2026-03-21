@@ -7,7 +7,6 @@ import time
 import numpy as np
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
-from typing import Optional
 import structlog
 
 log = structlog.get_logger()
@@ -16,54 +15,6 @@ _executor = ThreadPoolExecutor(max_workers=4)
 
 MODULE_TIMEOUT = 3.0   # 12 modules × 3s = 36s max — well under Render's 60s NGINX limit
 ANALYZE_TIMEOUT = 20.0  # hard asyncio cap on the full module run
-
-# ── Singleton caches — loaded ONCE, reused on every request ───────────────────
-# Avoids OOM-killing Render's 512MB free dyno on repeated torch model loads.
-_feature_engine = None
-_torch_models: dict = {}
-_torch_labels = ["SELL", "HOLD", "BUY"]
-_torch_weights = {"short": 0.4, "medium": 0.35, "long": 0.25}
-
-
-def _get_feature_engine():
-    global _feature_engine
-    if _feature_engine is None:
-        try:
-            from app.brain.feature_engine import InstitutionalFeatureEngine
-            _feature_engine = InstitutionalFeatureEngine()
-        except Exception as e:
-            log.warning("feature_engine_init_failed", error=str(e))
-    return _feature_engine
-
-
-def _get_torch_models(input_size: int) -> dict:
-    """Load torch models once and cache them. Skip gracefully if torch unavailable."""
-    global _torch_models
-    if _torch_models:
-        return _torch_models
-    try:
-        import os
-        import torch
-        from app.brain.model import InstitutionalBrain, TransformerBrain, LiteBrain
-        weights_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "weights"
-        )
-        best_model_path = os.path.join(weights_dir, "best_model.pth")
-        models = {
-            "short":  InstitutionalBrain(input_size=input_size),
-            "medium": TransformerBrain(input_size=input_size),
-            "long":   LiteBrain(input_size=input_size),
-        }
-        if os.path.exists(best_model_path):
-            try:
-                state = torch.load(best_model_path, map_location="cpu")
-                models["short"].load_state_dict(state)
-            except Exception:
-                pass
-        _torch_models = models
-    except Exception as e:
-        log.warning("torch_models_init_failed", error=str(e))
-    return _torch_models
 
 
 def _run_with_timeout(fn, *args, timeout=MODULE_TIMEOUT):
@@ -290,73 +241,9 @@ def _normalize_module_result(name: str, raw) -> dict:
 def run_ensemble(df: pd.DataFrame, module_results: dict) -> dict:
     """
     Ensemble decision from pre-computed module_results.
-
-    Uses a fast weighted vote on the already-computed module signals so we
-    NEVER re-run the 12 modules a second time (which was doubling request time
-    and pushing past Render's 60-second NGINX timeout).
-
-    Torch model inference is attempted as an optional boost on top of the vote
-    using a lightweight hand-crafted feature vector built from module signals
-    (no feature_engine re-run needed).
+    Pure module vote — no torch import, no OOM on Render's 512MB free dyno.
     """
-    # ── Fast weighted vote from pre-computed module signals ───────────────────
-    # This is the primary signal — always fast, always available.
-    vote = _module_vote_fallback(module_results)
-
-    # ── Optional: torch boost with lightweight features ───────────────────────
-    # Build a simple feature vector directly from module signal values.
-    # This avoids the heavy InstitutionalFeatureEngine re-run entirely.
-    try:
-        import torch
-
-        SIG_MAP = {"BUY": 1.0, "SELL": -1.0, "NEUTRAL": 0.0, "HOLD": 0.0}
-
-        # 12 directional values + 12 confidence values = 24-dim feature vector
-        signals_vec = []
-        values_vec  = []
-        for res in module_results.values():
-            signals_vec.append(SIG_MAP.get(res.get("signal", "NEUTRAL"), 0.0))
-            values_vec.append(float(res.get("value", 0.0) or 0.0))
-
-        # Normalise values to [-1, 1]
-        max_val = max(abs(v) for v in values_vec) or 1.0
-        values_vec = [v / max_val for v in values_vec]
-
-        features = np.array(signals_vec + values_vec, dtype=np.float32)
-        features = features.reshape(1, 1, -1)
-        input_size = features.shape[-1]
-
-        models = _get_torch_models(input_size)
-        if not models:
-            return vote
-
-        x = torch.tensor(features, dtype=torch.float32)
-        results = {}
-        for name, model in models.items():
-            model.eval()
-            with torch.no_grad():
-                try:
-                    out = model(x)
-                    logits = out[0] if isinstance(out, (tuple, list)) else out
-                    probs = torch.softmax(logits, dim=-1)[0]
-                    idx   = int(probs.argmax().item())
-                    conf  = float(probs[idx])
-                    results[name] = {"signal": _torch_labels[idx], "confidence": round(conf, 3)}
-                except Exception:
-                    results[name] = {"signal": "HOLD", "confidence": 0.33}
-
-        votes_d = {"BUY": 0.0, "SELL": 0.0, "HOLD": 0.0}
-        for name, res in results.items():
-            votes_d[res["signal"]] += _torch_weights.get(name, 0.33) * res["confidence"]
-
-        final  = max(votes_d, key=votes_d.get)
-        total  = sum(votes_d.values()) or 1
-        conf   = round(votes_d[final] / total, 3)
-        return {"signal": final, "confidence": conf, "models": results}
-
-    except Exception as e:
-        log.warning("ensemble_torch_skipped", error=str(e))
-        return vote
+    return _module_vote_fallback(module_results)
 
 
 def _module_vote_fallback(module_results: dict) -> dict:
