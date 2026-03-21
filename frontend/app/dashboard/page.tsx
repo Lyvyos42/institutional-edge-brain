@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { API, analyze, getSignalHistory, checkAlerts, type AnalysisResult, type SignalHistoryItem, type AlertItem } from "@/lib/api";
+import { API, analyze, getSignalHistory, checkAlerts, wakeBackend, type AnalysisResult, type SignalHistoryItem, type AlertItem } from "@/lib/api";
 import { getToken, getEmail as getStoredEmail, logoutSync as doLogout } from "@/lib/auth";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -549,6 +549,7 @@ export default function Dashboard() {
   const [triggeredAlerts, setTriggeredAlerts] = useState<AlertItem[]>([]);
   const [livePrice,  setLivePrice]  = useState<number | null>(null);
   const [priceChange, setPriceChange] = useState<number | null>(null);
+  const [connected,  setConnected]  = useState<boolean | null>(null); // null = checking
   const feedRef = useRef<HTMLDivElement>(null);
 
   // Clock
@@ -556,6 +557,18 @@ export default function Dashboard() {
     const tick = () => setClock(new Date().toLocaleTimeString("en-GB", { hour12: false }));
     tick();
     const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Wake backend on mount + poll connection status every 30s
+  useEffect(() => {
+    wakeBackend();
+    const checkHealth = () =>
+      fetch(`${API}/health`, { signal: AbortSignal.timeout(5000) })
+        .then(r => setConnected(r.ok))
+        .catch(() => setConnected(false));
+    checkHealth();
+    const id = setInterval(checkHealth, 30_000);
     return () => clearInterval(id);
   }, []);
 
@@ -772,9 +785,12 @@ export default function Dashboard() {
             ))}
           </div>
 
-          <div style={{ display:"flex", alignItems:"center", gap:6, color:"#10b981", fontSize:"0.65rem" }}>
-            <div style={{ width:6, height:6, borderRadius:"50%", background:"#10b981", animation:"pulse 2s ease-in-out infinite" }} />
-            CONNECTED
+          <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:"0.65rem",
+            color: connected === null ? "#475569" : connected ? "#10b981" : "#ef4444" }}>
+            <div style={{ width:6, height:6, borderRadius:"50%",
+              background: connected === null ? "#475569" : connected ? "#10b981" : "#ef4444",
+              animation: connected ? "pulse 2s ease-in-out infinite" : "none" }} />
+            {connected === null ? "CONNECTING..." : connected ? "CONNECTED" : "DISCONNECTED"}
           </div>
           <div style={{ color:"#475569" }}>{clock}</div>
 

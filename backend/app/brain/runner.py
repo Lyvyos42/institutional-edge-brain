@@ -17,8 +17,8 @@ log = structlog.get_logger()
 # because no executor is shared between callers and callees.
 _outer_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="outer")
 
-MODULE_TIMEOUT = 3.0   # per-module cap — 12 × 3s = 36s max
-ANALYZE_TIMEOUT = 25.0  # hard asyncio cap on the full module run
+MODULE_TIMEOUT = 4.0   # per-module cap — all 12 run in PARALLEL, so total ≈ 4s
+ANALYZE_TIMEOUT = 18.0  # hard asyncio cap on the full pipeline (data+modules)
 
 
 def _run_with_timeout(fn, *args, timeout=MODULE_TIMEOUT):
@@ -48,10 +48,31 @@ def _price_decimals(price: float) -> int:
     return 2
 
 
+def _run_single_module(name: str, cls, method: str, df: pd.DataFrame, symbol: str) -> tuple[str, dict]:
+    """Run one module and return (name, normalized_result). Used by parallel executor."""
+    COT_MODULES = {"cot"}
+    DUAL_ARG_MODULES = {"correlation"}
+    try:
+        instance = cls()
+        fn = getattr(instance, method)
+        if name in COT_MODULES:
+            raw, err = _run_with_timeout(fn, symbol)
+        elif name in DUAL_ARG_MODULES:
+            raw, err = _run_with_timeout(fn, df, symbol)
+        else:
+            raw, err = _run_with_timeout(fn, df)
+        if err:
+            return name, {"signal": "NEUTRAL", "value": 0.0, "label": "—", "detail": f"error: {err}", "error": True}
+        return name, _normalize_module_result(name, raw)
+    except Exception as e:
+        return name, {"signal": "NEUTRAL", "value": 0.0, "label": "—", "detail": str(e), "error": True}
+
+
 def run_all_modules(df: pd.DataFrame, symbol: str) -> dict:
     """
-    Run all 12 institutional detection modules.
-    Returns dict of {module_name: {signal, value, label, detail}}.
+    Run all 12 institutional detection modules IN PARALLEL.
+    All modules start simultaneously — total time ≈ slowest single module (~2-3s)
+    instead of sequential 12 × 3s = 36s.
     """
     from app.core.entropy_analyzer import EntropyAnalyzer
     from app.core.vpin_calculator import VPINCalculator
@@ -85,33 +106,23 @@ def run_all_modules(df: pd.DataFrame, symbol: str) -> dict:
     col_map = {"open": "Open", "high": "High", "low": "Low", "close": "Close", "volume": "Volume"}
     df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
 
-    # Modules that require symbol string instead of df, or need both
-    COT_MODULES = {"cot"}
-    DUAL_ARG_MODULES = {"correlation"}  # (df, symbol)
-
+    # Run all 12 modules in parallel — each gets its own thread
     results = {}
-    for name, (cls, method) in modules.items():
-        try:
-            instance = cls()
-            fn = getattr(instance, method)
-            if name in COT_MODULES:
-                raw, err = _run_with_timeout(fn, symbol)
-            elif name in DUAL_ARG_MODULES:
-                raw, err = _run_with_timeout(fn, df, symbol)
-            else:
-                raw, err = _run_with_timeout(fn, df)
-            if err:
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        futures = {
+            pool.submit(_run_single_module, name, cls, method, df, symbol): name
+            for name, (cls, method) in modules.items()
+        }
+        for future in futures:
+            name = futures[future]
+            try:
+                _, result = future.result(timeout=MODULE_TIMEOUT + 1)
+                results[name] = result
+            except Exception as e:
                 results[name] = {
                     "signal": "NEUTRAL", "value": 0.0, "label": "—",
-                    "detail": f"error: {err}", "error": True,
+                    "detail": str(e), "error": True,
                 }
-            else:
-                results[name] = _normalize_module_result(name, raw)
-        except Exception as e:
-            results[name] = {
-                "signal": "NEUTRAL", "value": 0.0, "label": "—",
-                "detail": str(e), "error": True,
-            }
 
     return results
 
@@ -342,7 +353,7 @@ async def analyze_symbol(symbol: str, timeframe: str = "5m") -> dict:
     try:
         df = await asyncio.wait_for(
             loop.run_in_executor(_outer_executor, fetch_live_data, symbol, timeframe, 300),
-            timeout=15.0,
+            timeout=10.0,
         )
     except Exception:
         df = None
