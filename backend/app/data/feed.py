@@ -16,6 +16,87 @@ import urllib.request
 import pandas as pd
 import numpy as np
 
+# ── tradingview_ta — real-time spot prices for ALL symbols (same as desktop app)
+# PyPI package, lightweight, cached 60s to avoid 429 rate-limiting.
+_tv_ta_cache: dict = {}
+_TV_TA_TTL = 60  # seconds
+
+try:
+    from tradingview_ta import TA_Handler, Interval as _TV_TA_Interval
+    HAS_TV_TA = True
+except Exception:
+    HAS_TV_TA = False
+
+# tradingview_ta symbol map: display symbol → (tv_symbol, exchange, screener)
+_TV_TA_MAP: dict[str, tuple[str, str, str]] = {
+    "XAUUSD": ("XAUUSD", "FX_IDC", "forex"), "XAGUSD": ("XAGUSD", "FX_IDC", "forex"),
+    "EURUSD": ("EURUSD", "FX_IDC", "forex"), "GBPUSD": ("GBPUSD", "FX_IDC", "forex"),
+    "USDJPY": ("USDJPY", "FX_IDC", "forex"), "AUDUSD": ("AUDUSD", "FX_IDC", "forex"),
+    "USDCAD": ("USDCAD", "FX_IDC", "forex"), "USDCHF": ("USDCHF", "FX_IDC", "forex"),
+    "NZDUSD": ("NZDUSD", "FX_IDC", "forex"), "EURGBP": ("EURGBP", "FX_IDC", "forex"),
+    "EURJPY": ("EURJPY", "FX_IDC", "forex"), "GBPJPY": ("GBPJPY", "FX_IDC", "forex"),
+    "EURCHF": ("EURCHF", "FX_IDC", "forex"), "EURAUD": ("EURAUD", "FX_IDC", "forex"),
+    "EURCAD": ("EURCAD", "FX_IDC", "forex"), "EURNZD": ("EURNZD", "FX_IDC", "forex"),
+    "GBPAUD": ("GBPAUD", "FX_IDC", "forex"), "GBPCAD": ("GBPCAD", "FX_IDC", "forex"),
+    "GBPCHF": ("GBPCHF", "FX_IDC", "forex"), "GBPNZD": ("GBPNZD", "FX_IDC", "forex"),
+    "AUDJPY": ("AUDJPY", "FX_IDC", "forex"), "AUDCAD": ("AUDCAD", "FX_IDC", "forex"),
+    "AUDCHF": ("AUDCHF", "FX_IDC", "forex"), "AUDNZD": ("AUDNZD", "FX_IDC", "forex"),
+    "CADJPY": ("CADJPY", "FX_IDC", "forex"), "CADCHF": ("CADCHF", "FX_IDC", "forex"),
+    "CHFJPY": ("CHFJPY", "FX_IDC", "forex"), "NZDJPY": ("NZDJPY", "FX_IDC", "forex"),
+    "NZDCAD": ("NZDCAD", "FX_IDC", "forex"), "NZDCHF": ("NZDCHF", "FX_IDC", "forex"),
+    "USDTRY": ("USDTRY", "FX_IDC", "forex"), "USDZAR": ("USDZAR", "FX_IDC", "forex"),
+    "USDMXN": ("USDMXN", "FX_IDC", "forex"), "USDSEK": ("USDSEK", "FX_IDC", "forex"),
+    "USDNOK": ("USDNOK", "FX_IDC", "forex"), "USDSGD": ("USDSGD", "FX_IDC", "forex"),
+    "USDHKD": ("USDHKD", "FX_IDC", "forex"), "USDCNH": ("USDCNH", "FX_IDC", "forex"),
+    "BTCUSD":  ("BTCUSD",  "COINBASE", "crypto"), "ETHUSD":  ("ETHUSD",  "COINBASE", "crypto"),
+    "SOLUSD":  ("SOLUSD",  "COINBASE", "crypto"), "XRPUSD":  ("XRPUSD",  "BINANCE",  "crypto"),
+    "BNBUSD":  ("BNBUSD",  "BINANCE",  "crypto"), "ADAUSD":  ("ADAUSD",  "COINBASE", "crypto"),
+    "DOGEUSD": ("DOGEUSD", "BINANCE",  "crypto"), "AVAXUSD": ("AVAXUSD", "COINBASE", "crypto"),
+    "DOTUSD":  ("DOTUSD",  "COINBASE", "crypto"), "LINKUSD": ("LINKUSD", "COINBASE", "crypto"),
+    "LTCUSD":  ("LTCUSD",  "COINBASE", "crypto"),
+    "SPX500": ("SPX", "SP", "america"),     "NAS100": ("NDX",   "NASDAQ",    "america"),
+    "US30":   ("DJI", "DJ", "america"),     "US500":  ("SPX",   "SP",        "america"),
+    "US100":  ("NDX", "NASDAQ", "america"), "GER40":  ("DEU40", "CAPITALCOM","cfd"),
+    "UK100":  ("UK100","CAPITALCOM","cfd"), "JPN225": ("JPN225","CAPITALCOM","cfd"),
+    "HK50":   ("HK50", "CAPITALCOM","cfd"), "AUS200": ("AUS200","CAPITALCOM","cfd"),
+    "USOIL":  ("USOIL", "FX_IDC","cfd"),   "UKOIL":  ("UKOIL", "FX_IDC","cfd"),
+    "NATGAS": ("NATGAS","FX_IDC","cfd"),
+}
+
+_TV_TA_TF_MAP: dict[str, str] = {}  # populated below after import check
+
+
+def _fetch_tv_ta_price(symbol: str) -> float | None:
+    """
+    Fetch real-time spot price from tradingview_ta with 60s cache.
+    Same pattern as desktop app tradingview_feed.py — avoids 429 rate-limiting.
+    """
+    if not HAS_TV_TA:
+        return None
+    entry = _TV_TA_MAP.get(symbol.upper())
+    if not entry:
+        return None
+    cache_key = symbol.upper()
+    cached = _tv_ta_cache.get(cache_key)
+    if cached and (time.time() - cached["ts"]) < _TV_TA_TTL:
+        return cached["price"]
+    tv_sym, exchange, screener = entry
+    try:
+        handler = TA_Handler(
+            symbol=tv_sym, exchange=exchange, screener=screener,
+            interval=_TV_TA_Interval.INTERVAL_1_HOUR, timeout=8,
+        )
+        analysis = handler.get_analysis()
+        price = float(analysis.indicators.get("close", 0) or 0)
+        if price > 0:
+            _tv_ta_cache[cache_key] = {"price": price, "ts": time.time()}
+            return price
+    except Exception:
+        if cached:
+            return cached["price"]  # return stale rather than nothing
+    return None
+
+
 # ── tvDatafeed — optional import, exact same pattern as AI Trading Copilot ────
 # Lazy singleton WebSocket connection reused across requests.
 # If not installed on this server, HAS_TV=False and it silently falls through.
@@ -395,12 +476,15 @@ def _mock_data(symbol: str, timeframe: str, limit: int) -> pd.DataFrame:
 
 def _inject_live_price(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
     """
-    Fetch the live current price from Yahoo Finance REST and patch it into
-    the last row's close (and adjust high/low). This is exactly how the
-    AI Trading Copilot keeps prices current regardless of bar-data age.
+    Patch the last bar with the live spot price.
+    Priority: tradingview_ta (real-time, same as desktop app) → Yahoo Finance REST fallback.
     """
-    yf_sym = SYMBOL_MAP.get(symbol.upper(), symbol)
-    live = _fetch_live_price(yf_sym)
+    # 1. tradingview_ta — real-time spot price for all symbols
+    live = _fetch_tv_ta_price(symbol)
+    # 2. Yahoo Finance REST fallback (AI Trading Copilot technique)
+    if not live or live <= 0:
+        yf_sym = SYMBOL_MAP.get(symbol.upper(), symbol)
+        live = _fetch_live_price(yf_sym)
     if live and live > 0:
         df = df.copy()
         dec = _price_decimals(live)

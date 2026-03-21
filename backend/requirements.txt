@@ -19,3 +19,4 @@ python-dotenv==1.0.1
 ccxt==4.3.89
 scipy==1.13.1
 resend==2.25.0
+tradingview-ta==3.3.0
