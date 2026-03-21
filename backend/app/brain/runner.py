@@ -14,7 +14,56 @@ log = structlog.get_logger()
 
 _executor = ThreadPoolExecutor(max_workers=4)
 
-MODULE_TIMEOUT = 8.0  # seconds per module
+MODULE_TIMEOUT = 5.0   # seconds per module (reduced to stay within Render limits)
+ANALYZE_TIMEOUT = 25.0  # hard cap on full analysis
+
+# ── Singleton caches — loaded ONCE, reused on every request ───────────────────
+# Avoids OOM-killing Render's 512MB free dyno on repeated torch model loads.
+_feature_engine = None
+_torch_models: dict = {}
+_torch_labels = ["SELL", "HOLD", "BUY"]
+_torch_weights = {"short": 0.4, "medium": 0.35, "long": 0.25}
+
+
+def _get_feature_engine():
+    global _feature_engine
+    if _feature_engine is None:
+        try:
+            from app.brain.feature_engine import InstitutionalFeatureEngine
+            _feature_engine = InstitutionalFeatureEngine()
+        except Exception as e:
+            log.warning("feature_engine_init_failed", error=str(e))
+    return _feature_engine
+
+
+def _get_torch_models(input_size: int) -> dict:
+    """Load torch models once and cache them. Skip gracefully if torch unavailable."""
+    global _torch_models
+    if _torch_models:
+        return _torch_models
+    try:
+        import os
+        import torch
+        from app.brain.model import InstitutionalBrain, TransformerBrain, LiteBrain
+        weights_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "weights"
+        )
+        best_model_path = os.path.join(weights_dir, "best_model.pth")
+        models = {
+            "short":  InstitutionalBrain(input_size=input_size),
+            "medium": TransformerBrain(input_size=input_size),
+            "long":   LiteBrain(input_size=input_size),
+        }
+        if os.path.exists(best_model_path):
+            try:
+                state = torch.load(best_model_path, map_location="cpu")
+                models["short"].load_state_dict(state)
+            except Exception:
+                pass
+        _torch_models = models
+    except Exception as e:
+        log.warning("torch_models_init_failed", error=str(e))
+    return _torch_models
 
 
 def _run_with_timeout(fn, *args, timeout=MODULE_TIMEOUT):
@@ -239,23 +288,22 @@ def _normalize_module_result(name: str, raw) -> dict:
 
 
 def run_ensemble(df: pd.DataFrame, module_results: dict) -> dict:
-    """Run the ensemble brain model. Returns {signal, confidence, models}."""
+    """Run the ensemble brain model using cached singletons. Returns {signal, confidence, models}."""
     try:
         import torch
-        from app.brain.feature_engine import InstitutionalFeatureEngine
 
-        # Feature engine's core modules expect uppercase columns
         col_map = {"open": "Open", "high": "High", "low": "Low", "close": "Close", "volume": "Volume"}
         df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
-        from app.brain.model import InstitutionalBrain, TransformerBrain, LiteBrain
-        import os
 
-        feature_engine = InstitutionalFeatureEngine()
+        # Use cached feature engine — no re-instantiation on every request
+        feature_engine = _get_feature_engine()
+        if feature_engine is None:
+            raise ValueError("Feature engine unavailable")
+
         features_raw = feature_engine.extract_features(df)
         if features_raw is None:
             raise ValueError("No features extracted")
 
-        # feature_engine returns a dict with 'features' key
         if isinstance(features_raw, dict):
             features_arr = features_raw.get("features")
             if features_arr is None:
@@ -269,48 +317,32 @@ def run_ensemble(df: pd.DataFrame, module_results: dict) -> dict:
         elif features.ndim == 2:
             features = features.reshape(features.shape[0], 1, features.shape[1])
 
-        weights_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "weights"
-        )
-        best_model_path = os.path.join(weights_dir, "best_model.pth")
-
         input_size = features.shape[-1]
-        models = {
-            "short":  InstitutionalBrain(input_size=input_size),
-            "medium": TransformerBrain(input_size=input_size),
-            "long":   LiteBrain(input_size=input_size),
-        }
 
-        if os.path.exists(best_model_path):
-            try:
-                state = torch.load(best_model_path, map_location="cpu")
-                models["short"].load_state_dict(state)
-            except Exception:
-                pass
+        # Use cached torch models — loaded once, never reloaded
+        models = _get_torch_models(input_size)
+        if not models:
+            raise ValueError("Torch models unavailable")
 
         x = torch.tensor(features, dtype=torch.float32)
         results = {}
-        labels = ["SELL", "HOLD", "BUY"]
 
         for name, model in models.items():
             model.eval()
             with torch.no_grad():
                 try:
                     out = model(x)
-                    # Some models return (logits, hidden) tuples
                     logits = out[0] if isinstance(out, (tuple, list)) else out
                     probs = torch.softmax(logits, dim=-1)[0]
                     idx = int(probs.argmax().item())
                     conf = float(probs[idx])
-                    results[name] = {"signal": labels[idx], "confidence": round(conf, 3)}
+                    results[name] = {"signal": _torch_labels[idx], "confidence": round(conf, 3)}
                 except Exception:
                     results[name] = {"signal": "HOLD", "confidence": 0.33}
 
-        # Weighted vote
         votes = {"BUY": 0.0, "SELL": 0.0, "HOLD": 0.0}
-        weights = {"short": 0.4, "medium": 0.35, "long": 0.25}
         for name, res in results.items():
-            votes[res["signal"]] += weights[name] * res["confidence"]
+            votes[res["signal"]] += _torch_weights.get(name, 0.33) * res["confidence"]
 
         final = max(votes, key=votes.get)
         total = sum(votes.values()) or 1
@@ -398,17 +430,37 @@ async def analyze_symbol(symbol: str, timeframe: str = "5m") -> dict:
     t0 = time.monotonic()
     loop = asyncio.get_event_loop()
 
-    # Fetch data in thread (yfinance is blocking)
+    # Fetch data — never returns None (mock fallback in feed.py)
     df = await loop.run_in_executor(_executor, fetch_live_data, symbol, timeframe, 300)
 
     if df is None or df.empty:
         return {"error": "No data available for this symbol", "symbol": symbol}
 
-    # Run modules and ensemble in thread pool
-    module_results = await loop.run_in_executor(_executor, run_all_modules, df, symbol)
-    ensemble = await loop.run_in_executor(_executor, run_ensemble, df, module_results)
-    levels = compute_levels(df, ensemble["signal"], ensemble["confidence"])
+    # Run modules with hard timeout to prevent Render dyno OOM-kill
+    try:
+        module_results = await asyncio.wait_for(
+            loop.run_in_executor(_executor, run_all_modules, df, symbol),
+            timeout=ANALYZE_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        log.warning("modules_timeout", symbol=symbol)
+        module_results = {
+            name: {"signal": "NEUTRAL", "value": 0.0, "label": "—", "detail": "timeout"}
+            for name in ["entropy","vpin","vol_accum","fix_time","month_flow",
+                         "iceberg","cot","correlation","vol_profile","stop_run","sweep","volatility"]
+        }
 
+    # Ensemble with hard timeout — falls back to module vote on any failure
+    try:
+        ensemble = await asyncio.wait_for(
+            loop.run_in_executor(_executor, run_ensemble, df, module_results),
+            timeout=15.0,
+        )
+    except asyncio.TimeoutError:
+        log.warning("ensemble_timeout", symbol=symbol)
+        ensemble = _module_vote_fallback(module_results)
+
+    levels = compute_levels(df, ensemble["signal"], ensemble["confidence"])
     elapsed = round((time.monotonic() - t0) * 1000)
 
     return {
