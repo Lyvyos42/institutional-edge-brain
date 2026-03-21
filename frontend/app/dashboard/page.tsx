@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { API, analyze, getSignalHistory, checkAlerts, wakeBackend, type AnalysisResult, type SignalHistoryItem, type AlertItem } from "@/lib/api";
+import { API, analyze, getSignalHistory, wakeBackend, type AnalysisResult, type SignalHistoryItem } from "@/lib/api";
 import { getToken, getEmail as getStoredEmail, logoutSync as doLogout } from "@/lib/auth";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -546,7 +546,6 @@ export default function Dashboard() {
   const [email,    setEmail]    = useState("");
   const [clock,    setClock]    = useState("");
   const [history,  setHistory]  = useState<SignalHistoryItem[]>([]);
-  const [triggeredAlerts, setTriggeredAlerts] = useState<AlertItem[]>([]);
   const [livePrice,  setLivePrice]  = useState<number | null>(null);
   const [priceChange, setPriceChange] = useState<number | null>(null);
   const [connected,  setConnected]  = useState<boolean | null>(null); // null = checking
@@ -635,9 +634,6 @@ export default function Dashboard() {
         addFeed(`Entry <b>${r.levels.entry?.toFixed(2)}</b> → TP <b style="color:#4ade80">${r.levels.take_profit?.toFixed(2)}</b> | SL <b style="color:#f87171">${r.levels.stop_loss?.toFixed(2)}</b>`, cls);
       }
       getSignalHistory(10).then(setHistory).catch(() => {});
-      checkAlerts({ symbol, timeframe, signal: r.signal, confidence: r.confidence })
-        .then(({ triggered }) => { if (triggered.length) setTriggeredAlerts(triggered); })
-        .catch(() => {});
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Analysis failed";
       setError(msg); addFeed(`ERROR: ${msg}`, "sell");
@@ -729,23 +725,6 @@ export default function Dashboard() {
       {/* Background grid */}
       <div className="bg-grid" style={{ position:"fixed", inset:0, zIndex:0, opacity:0.2, pointerEvents:"none" }} />
 
-      {/* Alert toasts */}
-      {triggeredAlerts.length > 0 && (
-        <div style={{ position:"fixed", top:72, right:16, zIndex:1000, display:"flex", flexDirection:"column", gap:8 }}>
-          {triggeredAlerts.map(a => (
-            <div key={a.id} style={{ background:"#000", border:"1px solid #4ade80", borderLeft:"3px solid #4ade80", borderRadius:8, padding:"10px 14px", minWidth:240, boxShadow:"0 0 20px rgba(74,222,128,0.2)", fontFamily:"'Roboto Mono',monospace" }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
-                <span style={{ color:"#4ade80", fontSize:"0.6rem", fontWeight:700, letterSpacing:"0.1em" }}>◈ ALERT TRIGGERED</span>
-                <button onClick={() => setTriggeredAlerts(p=>p.filter(x=>x.id!==a.id))} style={{ background:"none", border:"none", color:"#64748b", cursor:"pointer", fontSize:12 }}>✕</button>
-              </div>
-              <div style={{ color:"#e2e8f0", fontSize:"0.7rem", fontWeight:700 }}>{a.symbol} · {a.timeframe}</div>
-              <div style={{ color:"#64748b", fontSize:"0.62rem", marginTop:2 }}>
-                {a.condition==="signal_is_buy"?"Signal is BUY":a.condition==="signal_is_sell"?"Signal is SELL":a.condition==="any_signal"?"Signal detected":`Confidence ≥ ${((a.threshold??0)*100).toFixed(0)}%`}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* ── HEADER ── */}
       <header style={{
@@ -795,12 +774,7 @@ export default function Dashboard() {
           <div style={{ color:"#475569" }}>{clock}</div>
 
           {/* Nav links */}
-          <a href="/backtest" style={{ color:"#2563ff", fontSize:"0.65rem", textDecoration:"none", border:"1px solid rgba(37,99,255,0.3)", padding:"3px 10px", borderRadius:4 }}>BACKTEST</a>
-          <a href="/alerts"   style={{ color:"#4ade80", fontSize:"0.65rem", textDecoration:"none", border:"1px solid rgba(74,222,128,0.25)", padding:"3px 10px", borderRadius:4, position:"relative" }}>
-            ALERTS
-            {triggeredAlerts.length>0 && <span style={{ position:"absolute", top:-3, right:-3, width:7, height:7, borderRadius:"50%", background:"#4ade80", boxShadow:"0 0 6px #4ade80" }} />}
-          </a>
-          <a href="/account"  style={{ color:"#64748b", fontSize:"0.65rem", textDecoration:"none", border:"1px solid rgba(100,116,139,0.3)", padding:"3px 10px", borderRadius:4 }}>ACCOUNT</a>
+          <a href="/account" style={{ color:"#64748b", fontSize:"0.65rem", textDecoration:"none", border:"1px solid rgba(100,116,139,0.3)", padding:"3px 10px", borderRadius:4 }}>ACCOUNT</a>
           {email && <span style={{ color:"#334155", fontSize:"0.62rem" }}>{email}</span>}
           <button onClick={() => { doLogout(); router.replace("/login"); }} style={{ background:"transparent", border:"1px solid rgba(100,116,139,0.3)", color:"#475569", fontSize:"0.65rem", padding:"3px 10px", borderRadius:4, cursor:"pointer", fontFamily:"inherit" }}>LOGOUT</button>
         </div>
@@ -1079,11 +1053,11 @@ export default function Dashboard() {
         <div style={{
           gridColumn:"1 / -1",
           borderTop:"1px solid rgba(6,182,212,0.1)",
-          overflowX:"auto", overflowY:"hidden",
+          overflowX:"auto",
           padding:"10px 16px",
           background:"rgba(0,0,0,0.5)",
         }}>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(12, minmax(100px, 1fr))", gap:8, height:120 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(12, minmax(100px, 1fr))", gap:8 }}>
             {Object.entries(MODULE_META).map(([key, meta]) => {
               const m = modules[key];
               const sig = m?.signal ?? "NEUTRAL";
