@@ -18,6 +18,5 @@ torch==2.2.2
 requests==2.32.3
 python-dotenv==1.0.1
 ccxt==4.3.89
-git+https://github.com/StreamAlpha/tvdatafeed.git
 scipy==1.13.1
 resend==2.25.0
