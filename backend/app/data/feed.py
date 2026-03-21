@@ -1,17 +1,14 @@
 """
-Server-side data feed — mirrors the AI Trading Copilot structure.
+Server-side data feed — mirrors the AI Trading Copilot structure exactly.
 
 Priority chain:
-  Crypto  → Binance REST (real-time, no key) → Kraken REST → yfinance intraday
-  Others  → yfinance intraday
-
-Live current price is always injected into the last bar via Yahoo Finance REST
-(same technique as the AI Trading Copilot — works from any cloud server, no key).
-
-A deterministic mock fallback ensures the function NEVER returns None.
+  ALL     → tvDatafeed (TradingView WebSocket, real-time, no key) — same as Copilot
+  Crypto  → Binance REST (real-time, no key) → Kraken REST
+  Others  → yfinance intraday (Ticker.history — same as Copilot)
+  Always  → inject live price via Yahoo Finance REST (Copilot technique)
+  Always  → mock fallback so fetch_live_data NEVER returns None
 """
 import json
-import math
 import random
 import time
 import urllib.parse
@@ -19,17 +16,49 @@ import urllib.request
 import pandas as pd
 import numpy as np
 
+# ── tvDatafeed — optional import, exact same pattern as AI Trading Copilot ────
+# Lazy singleton WebSocket connection reused across requests.
+# If not installed on this server, HAS_TV=False and it silently falls through.
+_tv_client = None
+
+_TV_INTERVAL: dict = {}
+
+try:
+    from tvDatafeed import TvDatafeed as _TvDatafeed, Interval as _TvInterval
+    _TV_INTERVAL = {
+        "1m":  _TvInterval.in_1_minute,
+        "5m":  _TvInterval.in_5_minute,
+        "15m": _TvInterval.in_15_minute,
+        "30m": _TvInterval.in_30_minute,
+        "1h":  _TvInterval.in_1_hour,
+        "60m": _TvInterval.in_1_hour,
+        "4h":  _TvInterval.in_4_hour,
+        "1d":  _TvInterval.in_daily,
+        "1w":  _TvInterval.in_weekly,
+    }
+    HAS_TV = True
+except Exception:
+    HAS_TV = False
+
+
+def _get_tv_client():
+    """Return shared TvDatafeed instance (no credentials = guest access).
+    Identical to AI Trading Copilot singleton pattern."""
+    global _tv_client
+    if _tv_client is None:
+        try:
+            from tvDatafeed import TvDatafeed
+            _tv_client = TvDatafeed()
+        except Exception:
+            pass
+    return _tv_client
+
+
 try:
     import yfinance as yf
     HAS_YF = True
 except ImportError:
     HAS_YF = False
-
-try:
-    import ccxt
-    HAS_CCXT = True
-except ImportError:
-    HAS_CCXT = False
 
 
 # ── Symbol maps ────────────────────────────────────────────────────────────────
@@ -106,6 +135,58 @@ _KRAKEN_INTERVAL: dict[str, int] = {
     "1h": 60, "60m": 60, "4h": 240, "1d": 1440,
 }
 
+# TradingView exchange map — identical to AI Trading Copilot _TV_EXCHANGE
+_TV_EXCHANGE: dict[str, tuple[str, str]] = {
+    # Spot Metals (OANDA)
+    "XAUUSD": ("XAUUSD", "OANDA"),  "XAGUSD": ("XAGUSD", "OANDA"),
+    "XPTUSD": ("XPTUSD", "OANDA"),  "XPDUSD": ("XPDUSD", "OANDA"),
+    # FX Majors (FX_IDC)
+    "EURUSD": ("EURUSD", "FX_IDC"), "GBPUSD": ("GBPUSD", "FX_IDC"),
+    "USDJPY": ("USDJPY", "FX_IDC"), "AUDUSD": ("AUDUSD", "FX_IDC"),
+    "USDCAD": ("USDCAD", "FX_IDC"), "USDCHF": ("USDCHF", "FX_IDC"),
+    "NZDUSD": ("NZDUSD", "FX_IDC"),
+    # FX Minors (FX_IDC)
+    "EURGBP": ("EURGBP", "FX_IDC"), "EURJPY": ("EURJPY", "FX_IDC"),
+    "GBPJPY": ("GBPJPY", "FX_IDC"), "EURCHF": ("EURCHF", "FX_IDC"),
+    "EURAUD": ("EURAUD", "FX_IDC"), "EURCAD": ("EURCAD", "FX_IDC"),
+    "EURNZD": ("EURNZD", "FX_IDC"), "GBPAUD": ("GBPAUD", "FX_IDC"),
+    "GBPCAD": ("GBPCAD", "FX_IDC"), "GBPCHF": ("GBPCHF", "FX_IDC"),
+    "GBPNZD": ("GBPNZD", "FX_IDC"), "AUDJPY": ("AUDJPY", "FX_IDC"),
+    "AUDCAD": ("AUDCAD", "FX_IDC"), "AUDCHF": ("AUDCHF", "FX_IDC"),
+    "AUDNZD": ("AUDNZD", "FX_IDC"), "CADJPY": ("CADJPY", "FX_IDC"),
+    "CADCHF": ("CADCHF", "FX_IDC"), "CHFJPY": ("CHFJPY", "FX_IDC"),
+    "NZDJPY": ("NZDJPY", "FX_IDC"), "NZDCAD": ("NZDCAD", "FX_IDC"),
+    "NZDCHF": ("NZDCHF", "FX_IDC"),
+    # FX Exotics (FX_IDC)
+    "USDTRY": ("USDTRY", "FX_IDC"), "USDZAR": ("USDZAR", "FX_IDC"),
+    "USDMXN": ("USDMXN", "FX_IDC"), "USDSEK": ("USDSEK", "FX_IDC"),
+    "USDNOK": ("USDNOK", "FX_IDC"), "USDSGD": ("USDSGD", "FX_IDC"),
+    "USDHKD": ("USDHKD", "FX_IDC"), "USDCNH": ("USDCNH", "FX_IDC"),
+    # Energy / Commodities (TVC)
+    "USOIL":   ("USOIL",      "TVC"), "UKOIL":  ("UKOIL",   "TVC"),
+    "NATGAS":  ("NATURALGAS", "TVC"), "CORN":   ("CORN",    "TVC"),
+    "WHEAT":   ("WHEAT",      "TVC"), "SOYBEAN":("SOYBEAN", "TVC"),
+    "COFFEE":  ("COFFEE",     "TVC"), "SUGAR":  ("SUGAR",   "TVC"),
+    "COTTON":  ("COTTON",     "TVC"), "COCOA":  ("COCOA",   "TVC"),
+    # Crypto (BINANCE feed via TradingView)
+    "BTCUSD":  ("BTCUSDT",  "BINANCE"), "ETHUSD":  ("ETHUSDT",  "BINANCE"),
+    "BNBUSD":  ("BNBUSDT",  "BINANCE"), "XRPUSD":  ("XRPUSDT",  "BINANCE"),
+    "SOLUSD":  ("SOLUSDT",  "BINANCE"), "ADAUSD":  ("ADAUSDT",  "BINANCE"),
+    "DOGEUSD": ("DOGEUSDT", "BINANCE"), "AVAXUSD": ("AVAXUSDT", "BINANCE"),
+    "DOTUSD":  ("DOTUSDT",  "BINANCE"), "LINKUSD": ("LINKUSDT", "BINANCE"),
+    "LTCUSD":  ("LTCUSDT",  "BINANCE"), "BCHUSD":  ("BCHUSDT",  "BINANCE"),
+    "NEARUSD": ("NEARUSDT", "BINANCE"), "UNIUSD":  ("UNIUSDT",  "BINANCE"),
+    "ATOMUSD": ("ATOMUSDT", "BINANCE"), "MATICUSD":("MATICUSDT","BINANCE"),
+    # Equity Indices
+    "US500":  ("SPX",    "SP"),     "SPX500":  ("SPX",    "SP"),
+    "NAS100": ("NDX",    "NASDAQ"), "US100":   ("NDX",    "NASDAQ"),
+    "US30":   ("DJI",    "DJ"),
+    "UK100":  ("UK100",  "TVC"),    "GER40":   ("DEU40",  "TVC"),
+    "FRA40":  ("CAC40",  "TVC"),    "JPN225":  ("NI225",  "TVC"),
+    "HK50":   ("HSI",    "TVC"),    "AUS200":  ("ASX200", "TVC"),
+    "STOXX50":("STOXX50","TVC"),
+}
+
 CRYPTO_SYMBOLS: set[str] = set(_BINANCE_SYM.keys())
 
 # Reference prices for mock fallback (approximate, good enough for module math)
@@ -164,6 +245,53 @@ def _fetch_live_price(yf_sym: str) -> float | None:
             return p if p > 0 else None
     except Exception:
         return None
+
+
+# ── tvDatafeed (TradingView) — Priority #1, identical to AI Trading Copilot ──
+
+def _fetch_tvdatafeed(symbol: str, timeframe: str, limit: int) -> "pd.DataFrame | None":
+    """
+    Fetch OHLCV from TradingView WebSocket via tvDatafeed.
+    Exact same pattern as AI Trading Copilot — lazy singleton, no credentials,
+    graceful None return if not installed or TV blocks the request.
+    Supports all timeframes: 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w.
+    """
+    if not HAS_TV:
+        return None
+
+    entry = _TV_EXCHANGE.get(symbol.upper())
+    if not entry:
+        return None  # no TV mapping — falls through to Binance/yfinance
+
+    tv_symbol, exchange = entry
+    tv = _get_tv_client()
+    if tv is None:
+        return None
+
+    interval = _TV_INTERVAL.get(timeframe, _TV_INTERVAL.get("5m"))
+    if interval is None:
+        return None
+
+    try:
+        df = tv.get_hist(
+            symbol=tv_symbol,
+            exchange=exchange,
+            interval=interval,
+            n_bars=limit + 10,  # extra bars to account for in-progress bar
+        )
+    except Exception:
+        return None
+
+    if df is None or df.empty:
+        return None
+
+    df.columns = [c.lower() for c in df.columns]
+    needed = ["open", "high", "low", "close", "volume"]
+    if any(c not in df.columns for c in needed):
+        return None
+
+    df = df[needed].astype(float).tail(limit).reset_index(drop=True)
+    return df
 
 
 # ── Binance REST ──────────────────────────────────────────────────────────────
@@ -288,38 +416,39 @@ def _inject_live_price(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
 def fetch_live_data(symbol: str = "BTCUSD", timeframe: str = "5m", limit: int = 300) -> pd.DataFrame:
     """
     Fetch OHLCV DataFrame[open, high, low, close, volume].
-    NEVER returns None — falls back to mock data if all sources fail.
+    NEVER returns None — always falls back to mock data if all sources fail.
 
-    Priority:
-      Crypto  → Binance REST → Kraken REST → yfinance
-      Others  → yfinance
-    Then: inject live current price via Yahoo Finance REST (AI Copilot technique).
+    Priority (same structure as AI Trading Copilot):
+      1. tvDatafeed  — TradingView WebSocket, real-time, all symbols & timeframes
+      2. Binance REST — crypto only, real-time, no key
+      3. Kraken REST  — crypto fallback, no key
+      4. yfinance     — all symbols, intraday via Ticker.history (Copilot method)
+      5. Mock         — deterministic synthetic data, never fails
+      +  Yahoo Finance REST live price injected into last bar (Copilot technique)
     """
     sym = symbol.upper()
     df: pd.DataFrame | None = None
 
-    if sym in CRYPTO_SYMBOLS:
-        # 1. Binance — real-time, no key, most reliable for crypto
+    # 1. TradingView — Priority #1 for ALL symbols (identical to AI Trading Copilot)
+    df = _fetch_tvdatafeed(sym, timeframe, limit)
+
+    # 2+3. Binance + Kraken REST for crypto when TV unavailable
+    if (df is None or df.empty) and sym in CRYPTO_SYMBOLS:
         df = _fetch_binance(sym, timeframe, limit)
 
-        # 2. Kraken — different servers, strong fallback
         if df is None or df.empty:
             df = _fetch_kraken(sym, timeframe, limit)
 
-        # 3. yfinance intraday (BTC-USD etc.)
-        if df is None or df.empty:
-            yf_ticker = SYMBOL_MAP.get(sym, sym)
-            df = _fetch_yfinance(yf_ticker, timeframe, limit)
-    else:
-        # FX, metals, indices, energy, commodities
+    # 4. yfinance — same Ticker.history approach as AI Trading Copilot
+    if df is None or df.empty:
         yf_ticker = SYMBOL_MAP.get(sym, sym)
         df = _fetch_yfinance(yf_ticker, timeframe, limit)
 
-    # Mock fallback — same principle as AI Trading Copilot, never return None
+    # 5. Mock fallback — never return None (key lesson from AI Trading Copilot)
     if df is None or df.empty:
         df = _mock_data(sym, timeframe, limit)
 
-    # Inject live price into last bar (AI Trading Copilot technique)
+    # Inject live current price into last bar — AI Trading Copilot technique
     df = _inject_live_price(df, sym)
 
     return df
