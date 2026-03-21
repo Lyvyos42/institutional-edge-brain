@@ -1,18 +1,10 @@
 export const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("ieb_token");
-}
+import { authFetch } from "@/lib/auth";
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const token = getToken();
-  const res = await fetch(`${API}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options?.headers,
-    },
+  const res = await authFetch(`${API}${path}`, {
+    headers: { "Content-Type": "application/json", ...options?.headers },
     ...options,
   });
   if (!res.ok) {

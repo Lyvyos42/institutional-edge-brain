@@ -41,6 +41,8 @@ export function saveAuth(data: {
   if (data.refresh_token) localStorage.setItem(REFRESH_KEY, data.refresh_token);
   if (data.email)         localStorage.setItem(EMAIL_KEY,   data.email);
   if (data.tier)          localStorage.setItem(TIER_KEY,    data.tier);
+  // Flag cookie for Next.js middleware route protection
+  document.cookie = "ieb_auth=1; path=/; max-age=2592000; SameSite=Lax";
 }
 
 export function logout() {
@@ -48,6 +50,7 @@ export function logout() {
   localStorage.removeItem(REFRESH_KEY);
   localStorage.removeItem(EMAIL_KEY);
   localStorage.removeItem(TIER_KEY);
+  document.cookie = "ieb_auth=; path=/; max-age=0";
 }
 
 export function isLoggedIn(): boolean {
