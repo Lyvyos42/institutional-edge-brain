@@ -4,7 +4,6 @@ Returns a unified signal dict for the API.
 """
 import asyncio
 import time
-import threading
 import numpy as np
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
@@ -12,25 +11,29 @@ import structlog
 
 log = structlog.get_logger()
 
-# Two separate executors to avoid deadlock:
-# _outer_executor: used by analyze_symbol for fetch_live_data + run_all_modules (top-level)
-# _module_executor: used by _run_with_timeout for individual module execution
-# If both shared the same pool, a second concurrent request could fill all threads
-# with run_all_modules calls while inner module submits find no free thread → deadlock.
+# Single executor for outer-level tasks (fetch_live_data, run_all_modules).
+# Each module gets its OWN temporary executor inside _run_with_timeout — exact
+# same pattern as the desktop app (run_module_safe). This eliminates deadlocks
+# because no executor is shared between callers and callees.
 _outer_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="outer")
-_module_executor = ThreadPoolExecutor(max_workers=12, thread_name_prefix="module")
 
 MODULE_TIMEOUT = 3.0   # per-module cap — 12 × 3s = 36s max
 ANALYZE_TIMEOUT = 25.0  # hard asyncio cap on the full module run
 
 
 def _run_with_timeout(fn, *args, timeout=MODULE_TIMEOUT):
-    """Run fn(*args) in the module executor with timeout. Returns (result, error_str)."""
-    future = _module_executor.submit(fn, *args)
+    """
+    Run fn(*args) in a fresh, isolated ThreadPoolExecutor — exact desktop app pattern
+    (run_module_safe). The `with` block guarantees cleanup even on timeout.
+    Returns (result, error_str).
+    """
     try:
-        return future.result(timeout=timeout), None
-    except FuturesTimeout:
-        return None, "timeout"
+        with ThreadPoolExecutor(max_workers=1) as ex:
+            future = ex.submit(fn, *args)
+            try:
+                return future.result(timeout=timeout), None
+            except FuturesTimeout:
+                return None, "timeout"
     except Exception as e:
         return None, str(e)
 

@@ -477,14 +477,12 @@ def _mock_data(symbol: str, timeframe: str, limit: int) -> pd.DataFrame:
 def _inject_live_price(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
     """
     Patch the last bar with the live spot price.
-    Priority: tradingview_ta (real-time, same as desktop app) → Yahoo Finance REST fallback.
+    Uses Yahoo Finance REST only — tradingview_ta is skipped because TradingView
+    blocks Render/cloud datacenter IPs, causing hangs that outlast the NGINX timeout.
     """
-    # 1. tradingview_ta — real-time spot price for all symbols
-    live = _fetch_tv_ta_price(symbol)
-    # 2. Yahoo Finance REST fallback (AI Trading Copilot technique)
-    if not live or live <= 0:
-        yf_sym = SYMBOL_MAP.get(symbol.upper(), symbol)
-        live = _fetch_live_price(yf_sym)
+    # Yahoo Finance REST — works from any cloud server, no API key, fast
+    yf_sym = SYMBOL_MAP.get(symbol.upper(), symbol)
+    live = _fetch_live_price(yf_sym)
     if live and live > 0:
         df = df.copy()
         dec = _price_decimals(live)
