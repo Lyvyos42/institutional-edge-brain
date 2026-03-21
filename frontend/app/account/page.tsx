@@ -17,6 +17,8 @@ interface UserInfo {
   last_login: string | null;
   daily_used: number;
   daily_limit: number | null;
+  has_password: boolean;
+  has_google: boolean;
 }
 
 function TierBadge({ tier }: { tier: string }) {
@@ -164,25 +166,41 @@ export default function AccountPage() {
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 28 }}>
           <div style={{ fontSize: 11, color: C.muted, letterSpacing: 1, marginBottom: 20 }}>CHANGE PASSWORD</div>
 
-          <form onSubmit={handleChangePassword}>
-            {pwFields.map(({ label, value, set }) => (
-              <label key={label} style={{ display: "block", marginBottom: 14 }}>
-                <div style={{ color: C.muted, fontSize: 10, letterSpacing: 1, marginBottom: 5 }}>{label}</div>
-                <input type="password" value={value} onChange={e => set(e.target.value)} required
-                  style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, color: C.text,
-                           padding: "9px 12px", borderRadius: 6, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} />
-              </label>
-            ))}
+          {/* Supabase / Google / magic-link users have no local password */}
+          {info && !info.has_password ? (
+            <div style={{ padding: "14px 16px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8 }}>
+              <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.7 }}>
+                {info.has_google
+                  ? "Your account is linked to Google. Password management is handled by Google — use the Google sign-in button to access your account."
+                  : "Your account uses passwordless login (magic link or Google). To set a password, log out and use the forgot-password flow."}
+              </div>
+              <a href="/forgot-password"
+                style={{ display: "inline-block", marginTop: 12, color: C.accent, fontSize: 12, textDecoration: "none",
+                         border: `1px solid ${C.accent}55`, padding: "6px 14px", borderRadius: 6 }}>
+                Set a password via email →
+              </a>
+            </div>
+          ) : (
+            <form onSubmit={handleChangePassword}>
+              {pwFields.map(({ label, value, set }) => (
+                <label key={label} style={{ display: "block", marginBottom: 14 }}>
+                  <div style={{ color: C.muted, fontSize: 10, letterSpacing: 1, marginBottom: 5 }}>{label}</div>
+                  <input type="password" value={value} onChange={e => set(e.target.value)} required
+                    style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, color: C.text,
+                             padding: "9px 12px", borderRadius: 6, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} />
+                </label>
+              ))}
 
-            {pwError   && <div style={{ color: C.red,   fontSize: 12, marginBottom: 12, padding: "8px 12px", background: "#ff446611", borderRadius: 6 }}>{pwError}</div>}
-            {pwSuccess && <div style={{ color: C.green, fontSize: 12, marginBottom: 12, padding: "8px 12px", background: "#00c89611", borderRadius: 6 }}>{pwSuccess}</div>}
+              {pwError   && <div style={{ color: C.red,   fontSize: 12, marginBottom: 12, padding: "8px 12px", background: "#ff446611", borderRadius: 6 }}>{pwError}</div>}
+              {pwSuccess && <div style={{ color: C.green, fontSize: 12, marginBottom: 12, padding: "8px 12px", background: "#00c89611", borderRadius: 6 }}>{pwSuccess}</div>}
 
-            <button type="submit" disabled={pwLoading}
-              style={{ background: C.surface, border: `1px solid ${C.accent}`, color: C.accent, padding: "10px 24px",
-                       borderRadius: 6, fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: "pointer", fontFamily: "monospace" }}>
-              {pwLoading ? "SAVING..." : "UPDATE PASSWORD"}
-            </button>
-          </form>
+              <button type="submit" disabled={pwLoading}
+                style={{ background: C.surface, border: `1px solid ${C.accent}`, color: C.accent, padding: "10px 24px",
+                         borderRadius: 6, fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: "pointer", fontFamily: "monospace" }}>
+                {pwLoading ? "SAVING..." : "UPDATE PASSWORD"}
+              </button>
+            </form>
+          )}
         </div>
 
       </div>

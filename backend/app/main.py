@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config import settings
 try:
-    from app.api.routes import auth, signals, market, backtest, admin
+    from app.api.routes import auth, signals, market, backtest, admin, alerts
 except Exception as _import_err:
     import traceback, sys
     traceback.print_exc()
@@ -20,6 +20,7 @@ async def lifespan(app: FastAPI):
         from app.db.database import engine, Base
         import app.models.user
         import app.models.signal
+        import app.models.alert
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
@@ -37,6 +38,18 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS magic_token VARCHAR",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS magic_token_expires TIMESTAMPTZ",
+            # Alerts table (create_all handles this, but keep idempotent for safety)
+            """CREATE TABLE IF NOT EXISTS alerts (
+                id VARCHAR PRIMARY KEY,
+                user_id VARCHAR NOT NULL,
+                symbol VARCHAR(20) NOT NULL,
+                timeframe VARCHAR(5) NOT NULL DEFAULT '5m',
+                condition VARCHAR(30) NOT NULL,
+                threshold FLOAT,
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                last_triggered TIMESTAMPTZ
+            )""",
         ]
         async with engine.begin() as conn:
             for stmt in migration_stmts:
@@ -67,6 +80,7 @@ app.include_router(signals.router)
 app.include_router(market.router)
 app.include_router(backtest.router)
 app.include_router(admin.router)
+app.include_router(alerts.router)
 
 
 @app.get("/health")

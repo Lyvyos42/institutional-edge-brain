@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 // Routes that require authentication
-const PROTECTED = ["/dashboard", "/account", "/backtest"];
+const PROTECTED = ["/dashboard", "/account", "/backtest", "/alerts"];
 // Routes only for unauthenticated users (redirect to dashboard if logged in)
 const AUTH_ONLY = ["/login", "/register", "/forgot-password"];
 

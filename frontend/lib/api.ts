@@ -150,3 +150,57 @@ export async function changePassword(currentPassword: string, newPassword: strin
     body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
   });
 }
+
+export interface SignalHistoryItem {
+  id: string;
+  symbol: string;
+  timeframe: string;
+  direction: string;
+  confidence: number;
+  entry_price: number | null;
+  stop_loss: number | null;
+  take_profit: number | null;
+  risk_reward: number | null;
+  created_at: string | null;
+}
+
+export async function getSignalHistory(limit = 10): Promise<SignalHistoryItem[]> {
+  return apiFetch(`/api/signals/history?limit=${limit}`);
+}
+
+export interface AlertItem {
+  id: string;
+  symbol: string;
+  timeframe: string;
+  condition: string;
+  threshold: number | null;
+  is_active: boolean;
+  created_at: string | null;
+  last_triggered: string | null;
+}
+
+export async function getAlerts(): Promise<AlertItem[]> {
+  return apiFetch("/api/alerts");
+}
+
+export async function createAlert(body: {
+  symbol: string;
+  timeframe: string;
+  condition: string;
+  threshold?: number;
+}): Promise<AlertItem> {
+  return apiFetch("/api/alerts", { method: "POST", body: JSON.stringify(body) });
+}
+
+export async function deleteAlert(id: string): Promise<void> {
+  return apiFetch(`/api/alerts/${id}`, { method: "DELETE" });
+}
+
+export async function checkAlerts(body: {
+  symbol: string;
+  timeframe: string;
+  signal: string;
+  confidence: number;
+}): Promise<{ triggered: AlertItem[] }> {
+  return apiFetch("/api/alerts/check", { method: "POST", body: JSON.stringify(body) });
+}
