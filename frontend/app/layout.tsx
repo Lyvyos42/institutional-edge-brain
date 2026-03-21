@@ -10,7 +10,13 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body style={{ background: "#06060f", margin: 0, minHeight: "100vh" }}>
+      <head>
+        <link
+          href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;500;700&family=Roboto+Mono:wght@300;400;500&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body style={{ background: "#000", margin: 0, minHeight: "100vh", fontFamily: "'Rajdhani', sans-serif" }}>
         <Providers>{children}</Providers>
       </body>
     </html>
