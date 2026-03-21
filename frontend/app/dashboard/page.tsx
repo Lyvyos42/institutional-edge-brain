@@ -704,8 +704,8 @@ export default function Dashboard() {
         }
         .module-card.active-buy  { border-color:#4ade80; background:rgba(74,222,128,0.08); box-shadow:inset 0 0 20px rgba(74,222,128,0.2), 0 0 10px rgba(74,222,128,0.15); }
         .module-card.active-sell { border-color:#f87171; background:rgba(248,113,113,0.08); box-shadow:inset 0 0 20px rgba(248,113,113,0.2), 0 0 10px rgba(248,113,113,0.15); }
-        .module-card .mlabel { font-size:0.58rem; color:#67e8f9; letter-spacing:0.15em; margin-bottom:4px; font-family:'Roboto Mono',monospace; }
-        .module-card .mvalue { font-size:0.82rem; font-weight:bold; }
+        .module-card .mlabel { font-size:0.6rem; color:#67e8f9; letter-spacing:0.12em; margin-bottom:4px; font-family:'JetBrains Mono',monospace; }
+        .module-card .mvalue { font-size:0.9rem; font-weight:bold; }
         .no-scrollbar::-webkit-scrollbar { display:none; }
         .no-scrollbar { -ms-overflow-style:none; scrollbar-width:none; }
         .scan-overlay { position:relative; overflow:hidden; }
@@ -741,7 +741,7 @@ export default function Dashboard() {
           </h1>
         </div>
 
-        <div style={{ display:"flex", alignItems:"center", gap:16, fontFamily:"'Roboto Mono',monospace", fontSize:"0.72rem", color:"#67e8f9" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:16, fontFamily:"'JetBrains Mono',monospace", fontSize:"0.72rem", color:"#67e8f9" }}>
           {/* Symbol selector */}
           <select value={symbol} onChange={e => setSymbol(e.target.value)} style={{ background:"#000", border:"1px solid rgba(22,78,99,0.8)", color:"#06b6d4", borderRadius:4, padding:"3px 8px", fontSize:"0.72rem", fontFamily:"inherit", cursor:"pointer", outline:"none" }}>
             {Object.entries(SYMBOLS).map(([group, syms]) => (
@@ -798,11 +798,11 @@ export default function Dashboard() {
           overflowY:"auto", padding:"16px", display:"flex", flexDirection:"column", gap:14,
           minHeight:0,
         }}>
-          <div style={{ color:"#67e8f9", fontSize:"0.65rem", letterSpacing:"0.15em", fontFamily:"'Roboto Mono',monospace" }}>MARKET METRICS</div>
+          <div style={{ color:"#67e8f9", fontSize:"0.65rem", letterSpacing:"0.15em", fontFamily:"'JetBrains Mono',monospace" }}>MARKET METRICS</div>
 
           {/* Price display */}
           <div style={{ textAlign:"center" }}>
-            <div style={{ color:"#475569", fontSize:"0.6rem", fontFamily:"'Roboto Mono',monospace", letterSpacing:"0.1em" }}>CURRENT PRICE</div>
+            <div style={{ color:"#475569", fontSize:"0.6rem", fontFamily:"'JetBrains Mono',monospace", letterSpacing:"0.1em" }}>CURRENT PRICE</div>
             <div style={{ color:"#fff", fontSize:"2.8rem", fontWeight:700, letterSpacing:"-0.02em", lineHeight:1.1, fontFamily:"'Rajdhani',sans-serif", textShadow:"0 0 20px rgba(255,255,255,0.3)" }}>
               {(() => {
                 const displayPrice = livePrice ?? levels?.price ?? null;
@@ -811,11 +811,11 @@ export default function Dashboard() {
               })()}
             </div>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, marginTop:4 }}>
-              <span style={{ color:"#06b6d4", fontSize:"0.7rem", fontFamily:"'Roboto Mono',monospace" }}>{symbol}</span>
+              <span style={{ color:"#06b6d4", fontSize:"0.7rem", fontFamily:"'JetBrains Mono',monospace" }}>{symbol}</span>
               {priceChange != null && (
                 <span style={{
                   fontSize:"0.65rem",
-                  fontFamily:"'Roboto Mono',monospace",
+                  fontFamily:"'JetBrains Mono',monospace",
                   color: priceChange >= 0 ? "#4ade80" : "#f87171",
                   fontWeight: 600,
                 }}>
@@ -827,7 +827,7 @@ export default function Dashboard() {
 
           {/* Signal confidence box */}
           <div style={{ border:"1px solid rgba(6,182,212,0.3)", background:"rgba(6,182,212,0.07)", borderRadius:6, padding:"14px", textAlign:"center" }}>
-            <div style={{ color:"#67e8f9", fontSize:"0.62rem", letterSpacing:"0.1em", fontFamily:"'Roboto Mono',monospace", marginBottom:8 }}>SIGNAL CONFIDENCE</div>
+            <div style={{ color:"#67e8f9", fontSize:"0.62rem", letterSpacing:"0.1em", fontFamily:"'JetBrains Mono',monospace", marginBottom:8 }}>SIGNAL CONFIDENCE</div>
             <div style={{ color:"#fff", fontSize:"2.2rem", fontWeight:700, fontFamily:"'Rajdhani',sans-serif", marginBottom:8, textShadow:`0 0 15px ${sigCol}` }}>
               {conf}%
             </div>
@@ -838,12 +838,12 @@ export default function Dashboard() {
 
           {/* Controls: Category tabs */}
           <div>
-            <div style={{ color:"#334155", fontSize:"0.58rem", fontFamily:"'Roboto Mono',monospace", letterSpacing:"0.1em", marginBottom:6 }}>MARKET</div>
+            <div style={{ color:"#334155", fontSize:"0.58rem", fontFamily:"'JetBrains Mono',monospace", letterSpacing:"0.1em", marginBottom:6 }}>MARKET</div>
             <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
               {Object.keys(SYMBOLS).map(cat => (
                 <button key={cat} onClick={() => { setCategory(cat); setSymbol(SYMBOLS[cat][0]); }} style={{
                   fontSize:"0.58rem", fontWeight:700, padding:"3px 7px", borderRadius:4, border:"1px solid", cursor:"pointer",
-                  fontFamily:"'Roboto Mono',monospace",
+                  fontFamily:"'JetBrains Mono',monospace",
                   borderColor: category===cat ? "#06b6d4" : "rgba(22,78,99,0.5)",
                   background:  category===cat ? "rgba(6,182,212,0.15)" : "transparent",
                   color:       category===cat ? "#06b6d4" : "#475569",
@@ -859,7 +859,7 @@ export default function Dashboard() {
             {(SYMBOLS[category]||[]).map(s => (
               <button key={s} onClick={() => setSymbol(s)} style={{
                 fontSize:"0.63rem", padding:"4px 8px", borderRadius:4, border:"1px solid", cursor:"pointer",
-                fontFamily:"'Roboto Mono',monospace",
+                fontFamily:"'JetBrains Mono',monospace",
                 borderColor: symbol===s ? "#06b6d4" : "rgba(22,78,99,0.4)",
                 background:  symbol===s ? "rgba(6,182,212,0.15)" : "rgba(0,0,0,0.3)",
                 color:       symbol===s ? "#06b6d4" : "#64748b",
@@ -883,7 +883,7 @@ export default function Dashboard() {
           </button>
 
           {error && (
-            <div style={{ color:"#f87171", fontSize:"0.68rem", padding:"8px 10px", background:"rgba(248,113,113,0.07)", borderRadius:6, border:"1px solid rgba(248,113,113,0.2)", fontFamily:"'Roboto Mono',monospace" }}>
+            <div style={{ color:"#f87171", fontSize:"0.68rem", padding:"8px 10px", background:"rgba(248,113,113,0.07)", borderRadius:6, border:"1px solid rgba(248,113,113,0.2)", fontFamily:"'JetBrains Mono',monospace" }}>
               {error}
             </div>
           )}
@@ -892,21 +892,21 @@ export default function Dashboard() {
           {result && (
             <div style={{ border:"1px solid rgba(6,182,212,0.25)", background:"rgba(6,182,212,0.05)", borderRadius:6, padding:12 }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-                <div style={{ color:"#eab308", fontSize:"0.58rem", letterSpacing:"0.15em", fontFamily:"'Roboto Mono',monospace" }}>ACT NOW</div>
+                <div style={{ color:"#eab308", fontSize:"0.58rem", letterSpacing:"0.15em", fontFamily:"'JetBrains Mono',monospace" }}>ACT NOW</div>
                 <div style={{ color:sigCol, fontSize:"1.4rem", fontWeight:900, fontFamily:"'Rajdhani',sans-serif", letterSpacing:"0.05em", textShadow:`0 0 15px ${sigCol}` }}>
                   {signalLabel(sig)}
                 </div>
               </div>
               {levels?.entry && (
-                <div style={{ fontFamily:"'Roboto Mono',monospace" }}>
+                <div style={{ fontFamily:"'JetBrains Mono',monospace" }}>
                   {[
                     { label:"ENTRY",  val:levels.entry,       col:"#e2e8f0" },
                     { label:"STOP",   val:levels.stop_loss,   col:"#f87171" },
                     { label:"TARGET", val:levels.take_profit, col:"#4ade80" },
                   ].map(({ label, val, col }) => (
                     <div key={label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"5px 0", borderBottom:"1px solid rgba(255,255,255,0.04)" }}>
-                      <span style={{ color:"#475569", fontSize:"0.6rem" }}>{label}</span>
-                      <span style={{ color:col, fontSize:"0.85rem", fontWeight:700 }}>{val?.toFixed(val > 100 ? 2 : 4)}</span>
+                      <span style={{ color:"#475569", fontSize:"0.65rem" }}>{label}</span>
+                      <span style={{ color:col, fontSize:"1rem", fontWeight:700 }}>{val?.toFixed(val > 100 ? 2 : 4)}</span>
                     </div>
                   ))}
                   {levels.risk_reward && (
@@ -921,7 +921,7 @@ export default function Dashboard() {
 
           {/* Brain Decision */}
           <div style={{ textAlign:"center", marginTop:4 }}>
-            <div style={{ color:"#334155", fontSize:"0.6rem", fontFamily:"'Roboto Mono',monospace", letterSpacing:"0.1em", marginBottom:4 }}>BRAIN DECISION</div>
+            <div style={{ color:"#334155", fontSize:"0.6rem", fontFamily:"'JetBrains Mono',monospace", letterSpacing:"0.1em", marginBottom:4 }}>BRAIN DECISION</div>
             <div style={{ color: result ? sigCol : "#1e293b", fontSize:"1.8rem", fontWeight:900, fontFamily:"'Rajdhani',sans-serif", letterSpacing:"0.15em", textShadow: result ? `0 0 15px ${sigCol}` : "none", animation: result ? "pulse 2s ease-in-out infinite" : "none" }}>
               {result ? signalLabel(sig) : "WAIT"}
             </div>
@@ -930,9 +930,9 @@ export default function Dashboard() {
           {/* Ensemble models */}
           {result?.ensemble?.models && Object.keys(result.ensemble.models).length > 0 && (
             <div style={{ borderTop:"1px solid rgba(6,182,212,0.1)", paddingTop:10 }}>
-              <div style={{ color:"#334155", fontSize:"0.58rem", fontFamily:"'Roboto Mono',monospace", letterSpacing:"0.1em", marginBottom:6 }}>ENSEMBLE MODELS</div>
+              <div style={{ color:"#334155", fontSize:"0.58rem", fontFamily:"'JetBrains Mono',monospace", letterSpacing:"0.1em", marginBottom:6 }}>ENSEMBLE MODELS</div>
               {Object.entries(result.ensemble.models).map(([name, m]) => (
-                <div key={name} style={{ display:"flex", justifyContent:"space-between", marginBottom:3, fontFamily:"'Roboto Mono',monospace" }}>
+                <div key={name} style={{ display:"flex", justifyContent:"space-between", marginBottom:3, fontFamily:"'JetBrains Mono',monospace" }}>
                   <span style={{ color:"#334155", fontSize:"0.6rem", textTransform:"uppercase" }}>{name}</span>
                   <span style={{ color:signalColor(m.signal), fontSize:"0.6rem", fontWeight:700 }}>{signalLabel(m.signal)} {(m.confidence*100).toFixed(0)}%</span>
                 </div>
@@ -954,19 +954,19 @@ export default function Dashboard() {
 
           {/* Symbol overlay */}
           <div style={{ position:"absolute", top:16, left:"50%", transform:"translateX(-50%)", textAlign:"center", pointerEvents:"none" }}>
-            <div style={{ color:"#06b6d4", fontSize:"0.75rem", fontWeight:700, letterSpacing:"0.2em", fontFamily:"'Roboto Mono',monospace", opacity:0.7 }}>{symbol} · {timeframe}</div>
+            <div style={{ color:"#06b6d4", fontSize:"0.75rem", fontWeight:700, letterSpacing:"0.2em", fontFamily:"'JetBrains Mono',monospace", opacity:0.7 }}>{symbol} · {timeframe}</div>
           </div>
 
           {/* Gamma overlay placeholder */}
           {result && (
             <div style={{ position:"absolute", bottom:16, left:"50%", transform:"translateX(-50%)", display:"flex", gap:10, pointerEvents:"none" }}>
               {levels?.support && (
-                <div style={{ background:"rgba(0,0,0,0.6)", border:"1px solid rgba(124,58,237,0.5)", borderRadius:4, padding:"3px 10px", fontFamily:"'Roboto Mono',monospace", fontSize:"0.62rem", color:"#a78bfa" }}>
+                <div style={{ background:"rgba(0,0,0,0.6)", border:"1px solid rgba(124,58,237,0.5)", borderRadius:4, padding:"3px 10px", fontFamily:"'JetBrains Mono',monospace", fontSize:"0.62rem", color:"#a78bfa" }}>
                   SUP: <b style={{ color:"#fff" }}>{levels.support?.toFixed(levels.support > 100 ? 2 : 4)}</b>
                 </div>
               )}
               {levels?.resistance && (
-                <div style={{ background:"rgba(0,0,0,0.6)", border:"1px solid rgba(239,68,68,0.5)", borderRadius:4, padding:"3px 10px", fontFamily:"'Roboto Mono',monospace", fontSize:"0.62rem", color:"#f87171" }}>
+                <div style={{ background:"rgba(0,0,0,0.6)", border:"1px solid rgba(239,68,68,0.5)", borderRadius:4, padding:"3px 10px", fontFamily:"'JetBrains Mono',monospace", fontSize:"0.62rem", color:"#f87171" }}>
                   RES: <b style={{ color:"#fff" }}>{levels.resistance?.toFixed(levels.resistance > 100 ? 2 : 4)}</b>
                 </div>
               )}
@@ -975,7 +975,7 @@ export default function Dashboard() {
 
           {running && (
             <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", marginTop:60, pointerEvents:"none" }}>
-              <div style={{ color:"#06b6d4", fontSize:"0.65rem", fontWeight:700, letterSpacing:"0.2em", fontFamily:"'Roboto Mono',monospace" }}>NEURAL PROCESSING...</div>
+              <div style={{ color:"#06b6d4", fontSize:"0.65rem", fontWeight:700, letterSpacing:"0.2em", fontFamily:"'JetBrains Mono',monospace" }}>NEURAL PROCESSING...</div>
             </div>
           )}
         </div>
@@ -987,14 +987,14 @@ export default function Dashboard() {
         }}>
           <div style={{ padding:"12px 16px", borderBottom:"1px solid rgba(6,182,212,0.1)", display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
             <div style={{ width:6, height:6, borderRadius:"50%", background:"#4ade80", boxShadow:"0 0 8px #4ade80" }} />
-            <span style={{ color:"#67e8f9", fontSize:"0.65rem", fontFamily:"'Roboto Mono',monospace", letterSpacing:"0.12em" }}>MODULE ANALYSIS FEED</span>
-            {result && <span style={{ marginLeft:"auto", color:"#1e293b", fontSize:"0.58rem", fontFamily:"'Roboto Mono',monospace" }}>{result.latency_ms}ms</span>}
+            <span style={{ color:"#67e8f9", fontSize:"0.65rem", fontFamily:"'JetBrains Mono',monospace", letterSpacing:"0.12em" }}>MODULE ANALYSIS FEED</span>
+            {result && <span style={{ marginLeft:"auto", color:"#1e293b", fontSize:"0.58rem", fontFamily:"'JetBrains Mono',monospace" }}>{result.latency_ms}ms</span>}
           </div>
 
           {/* Live feed */}
           <div ref={feedRef} className="no-scrollbar" style={{ flex:1, overflowY:"auto", padding:"10px 14px" }}>
             {!result && (
-              <div style={{ color:"#1e293b", fontSize:"0.65rem", padding:"16px 0", fontFamily:"'Roboto Mono',monospace" }}>
+              <div style={{ color:"#1e293b", fontSize:"0.65rem", padding:"16px 0", fontFamily:"'JetBrains Mono',monospace" }}>
                 Waiting for feed...
               </div>
             )}
@@ -1016,12 +1016,12 @@ export default function Dashboard() {
                   }}>
                     <div style={{ width:6, height:6, borderRadius:"50%", background:col, boxShadow:`0 0 5px ${col}`, flexShrink:0 }} />
                     <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ color:"#94a3b8", fontSize:"0.62rem", fontFamily:"'Roboto Mono',monospace", fontWeight:700 }}>{MODULE_META[key].label}</div>
+                      <div style={{ color:"#94a3b8", fontSize:"0.62rem", fontFamily:"'JetBrains Mono',monospace", fontWeight:700 }}>{MODULE_META[key].label}</div>
                       {m.label && m.label !== m.signal && (
-                        <div style={{ color:"#334155", fontSize:"0.57rem", fontFamily:"'Roboto Mono',monospace", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{m.label}</div>
+                        <div style={{ color:"#334155", fontSize:"0.57rem", fontFamily:"'JetBrains Mono',monospace", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{m.label}</div>
                       )}
                     </div>
-                    <span style={{ color:col, fontSize:"0.6rem", fontWeight:700, background:`${col}18`, border:`1px solid ${col}30`, borderRadius:3, padding:"1px 5px", flexShrink:0, fontFamily:"'Roboto Mono',monospace" }}>
+                    <span style={{ color:col, fontSize:"0.6rem", fontWeight:700, background:`${col}18`, border:`1px solid ${col}30`, borderRadius:3, padding:"1px 5px", flexShrink:0, fontFamily:"'JetBrains Mono',monospace" }}>
                       {signalLabel(m.signal)}
                     </span>
                   </div>
@@ -1033,17 +1033,17 @@ export default function Dashboard() {
           {/* Recent signals history */}
           {history.length > 0 && !result && (
             <div className="no-scrollbar" style={{ borderTop:"1px solid rgba(6,182,212,0.08)", flex:1, overflowY:"auto", padding:"8px 0" }}>
-              <div style={{ padding:"0 14px 6px", color:"#1e293b", fontSize:"0.57rem", fontFamily:"'Roboto Mono',monospace", letterSpacing:"0.1em" }}>RECENT SIGNALS</div>
+              <div style={{ padding:"0 14px 6px", color:"#1e293b", fontSize:"0.57rem", fontFamily:"'JetBrains Mono',monospace", letterSpacing:"0.1em" }}>RECENT SIGNALS</div>
               {history.map(h => {
                 const col = signalColor(h.direction);
                 return (
                   <div key={h.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 14px", borderBottom:"1px solid rgba(255,255,255,0.02)" }}>
                     <div style={{ width:5, height:5, borderRadius:"50%", background:col, flexShrink:0 }} />
                     <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ color:"#475569", fontSize:"0.6rem", fontFamily:"'Roboto Mono',monospace", fontWeight:700 }}>{h.symbol} <span style={{ color:"#334155", fontWeight:400 }}>· {h.timeframe}</span></div>
+                      <div style={{ color:"#475569", fontSize:"0.6rem", fontFamily:"'JetBrains Mono',monospace", fontWeight:700 }}>{h.symbol} <span style={{ color:"#334155", fontWeight:400 }}>· {h.timeframe}</span></div>
                     </div>
-                    <span style={{ color:col, fontSize:"0.58rem", fontWeight:700, fontFamily:"'Roboto Mono',monospace" }}>{h.direction}</span>
-                    <span style={{ color:"#1e293b", fontSize:"0.55rem", fontFamily:"'Roboto Mono',monospace" }}>{h.confidence != null ? `${(h.confidence*100).toFixed(0)}%` : ""}</span>
+                    <span style={{ color:col, fontSize:"0.58rem", fontWeight:700, fontFamily:"'JetBrains Mono',monospace" }}>{h.direction}</span>
+                    <span style={{ color:"#1e293b", fontSize:"0.55rem", fontFamily:"'JetBrains Mono',monospace" }}>{h.confidence != null ? `${(h.confidence*100).toFixed(0)}%` : ""}</span>
                   </div>
                 );
               })}
@@ -1074,7 +1074,7 @@ export default function Dashboard() {
                     {m ? signalLabel(sig) : "—"}
                   </div>
                   {m?.label && m.label !== sig && (
-                    <div style={{ fontSize:"0.52rem", color:"#334155", fontFamily:"'Roboto Mono',monospace", marginTop:2, textAlign:"center" }}>{m.label.slice(0,16)}</div>
+                    <div style={{ fontSize:"0.58rem", color:"#334155", fontFamily:"'JetBrains Mono',monospace", marginTop:2, textAlign:"center" }}>{m.label.slice(0,16)}</div>
                   )}
                 </div>
               );
