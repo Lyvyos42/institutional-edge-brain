@@ -4,6 +4,7 @@ Returns a unified signal dict for the API.
 """
 import asyncio
 import time
+import threading
 import numpy as np
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
@@ -11,15 +12,21 @@ import structlog
 
 log = structlog.get_logger()
 
-_executor = ThreadPoolExecutor(max_workers=4)
+# Two separate executors to avoid deadlock:
+# _outer_executor: used by analyze_symbol for fetch_live_data + run_all_modules (top-level)
+# _module_executor: used by _run_with_timeout for individual module execution
+# If both shared the same pool, a second concurrent request could fill all threads
+# with run_all_modules calls while inner module submits find no free thread → deadlock.
+_outer_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="outer")
+_module_executor = ThreadPoolExecutor(max_workers=12, thread_name_prefix="module")
 
-MODULE_TIMEOUT = 3.0   # 12 modules × 3s = 36s max — well under Render's 60s NGINX limit
-ANALYZE_TIMEOUT = 20.0  # hard asyncio cap on the full module run
+MODULE_TIMEOUT = 3.0   # per-module cap — 12 × 3s = 36s max
+ANALYZE_TIMEOUT = 25.0  # hard asyncio cap on the full module run
 
 
 def _run_with_timeout(fn, *args, timeout=MODULE_TIMEOUT):
-    """Run fn(*args) in thread pool with timeout. Returns (result, error_str)."""
-    future = _executor.submit(fn, *args)
+    """Run fn(*args) in the module executor with timeout. Returns (result, error_str)."""
+    future = _module_executor.submit(fn, *args)
     try:
         return future.result(timeout=timeout), None
     except FuturesTimeout:
@@ -314,41 +321,46 @@ def compute_levels(df: pd.DataFrame, signal: str, confidence: float) -> dict:
     }
 
 
+_NEUTRAL_MODULES = {
+    name: {"signal": "NEUTRAL", "value": 0.0, "label": "—", "detail": "timeout"}
+    for name in ["entropy","vpin","vol_accum","fix_time","month_flow",
+                 "iceberg","cot","correlation","vol_profile","stop_run","sweep","volatility"]
+}
+
+
 async def analyze_symbol(symbol: str, timeframe: str = "5m") -> dict:
     """Main entry point. Fetches data, runs all modules + ensemble, returns full result."""
     from app.data.feed import fetch_live_data
 
     t0 = time.monotonic()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     # Fetch data — never returns None (mock fallback in feed.py)
-    df = await loop.run_in_executor(_executor, fetch_live_data, symbol, timeframe, 300)
+    try:
+        df = await asyncio.wait_for(
+            loop.run_in_executor(_outer_executor, fetch_live_data, symbol, timeframe, 300),
+            timeout=15.0,
+        )
+    except Exception:
+        df = None
 
     if df is None or df.empty:
         return {"error": "No data available for this symbol", "symbol": symbol}
 
-    # Run modules with hard timeout to prevent Render dyno OOM-kill
+    # Run modules — dedicated module executor prevents deadlock under concurrent requests
     try:
         module_results = await asyncio.wait_for(
-            loop.run_in_executor(_executor, run_all_modules, df, symbol),
+            loop.run_in_executor(_outer_executor, run_all_modules, df, symbol),
             timeout=ANALYZE_TIMEOUT,
         )
-    except asyncio.TimeoutError:
-        log.warning("modules_timeout", symbol=symbol)
-        module_results = {
-            name: {"signal": "NEUTRAL", "value": 0.0, "label": "—", "detail": "timeout"}
-            for name in ["entropy","vpin","vol_accum","fix_time","month_flow",
-                         "iceberg","cot","correlation","vol_profile","stop_run","sweep","volatility"]
-        }
+    except Exception:
+        log.warning("modules_timeout_or_error", symbol=symbol)
+        module_results = dict(_NEUTRAL_MODULES)
 
-    # Ensemble with hard timeout — falls back to module vote on any failure
+    # Ensemble (pure vote — instant, no timeout needed)
     try:
-        ensemble = await asyncio.wait_for(
-            loop.run_in_executor(_executor, run_ensemble, df, module_results),
-            timeout=15.0,
-        )
-    except asyncio.TimeoutError:
-        log.warning("ensemble_timeout", symbol=symbol)
+        ensemble = run_ensemble(df, module_results)
+    except Exception:
         ensemble = _module_vote_fallback(module_results)
 
     levels = compute_levels(df, ensemble["signal"], ensemble["confidence"])
