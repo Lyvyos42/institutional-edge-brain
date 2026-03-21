@@ -38,47 +38,62 @@ async def analyze(
     if user is None:
         raise HTTPException(401, "Authentication required to run analysis")
 
-    if user["tier"] == "free":
-        # Check and enforce daily limit
-        result = await db.execute(select(UserModel).where(UserModel.id == user["sub"]))
-        db_user = result.scalar_one_or_none()
-        if db_user:
-            today = date.today()
-            if db_user.daily_reset_date != today:
-                db_user.daily_analyses   = 0
-                db_user.daily_reset_date = today
-            if db_user.daily_analyses >= settings.free_daily_limit:
-                raise HTTPException(
-                    429,
-                    f"Daily limit reached ({settings.free_daily_limit} analyses/day on free tier). "
-                    "Upgrade to Pro for unlimited access.",
-                )
-            db_user.daily_analyses += 1
-            await db.commit()
+    # Supabase JWTs don't include 'tier' — default to "free" if missing
+    tier = user.get("tier", "free")
+    user_id = user.get("sub") or user.get("id") or user.get("user_id")
+
+    if tier == "free":
+        # Check and enforce daily limit — skip silently if DB is unavailable
+        try:
+            result = await db.execute(select(UserModel).where(UserModel.id == user_id))
+            db_user = result.scalar_one_or_none()
+            if db_user:
+                today = date.today()
+                if db_user.daily_reset_date != today:
+                    db_user.daily_analyses   = 0
+                    db_user.daily_reset_date = today
+                if db_user.daily_analyses >= settings.free_daily_limit:
+                    raise HTTPException(
+                        429,
+                        f"Daily limit reached ({settings.free_daily_limit} analyses/day on free tier). "
+                        "Upgrade to Pro for unlimited access.",
+                    )
+                db_user.daily_analyses += 1
+                await db.commit()
+        except HTTPException:
+            raise
+        except Exception:
+            pass  # DB unavailable — allow analysis to proceed
 
     result = await analyze_symbol(symbol, body.timeframe)
     if "error" in result:
         raise HTTPException(503, result["error"])
 
-    levels = result.get("levels", {})
-    sig = BrainSignal(
-        user_id=user["sub"] if user else None,
-        symbol=symbol,
-        timeframe=body.timeframe,
-        direction=result["signal"],
-        confidence=result["confidence"],
-        entry_price=levels.get("entry"),
-        stop_loss=levels.get("stop_loss"),
-        take_profit=levels.get("take_profit"),
-        risk_reward=levels.get("risk_reward"),
-        module_results=result.get("modules"),
-        ensemble_detail=result.get("ensemble"),
-    )
-    db.add(sig)
-    await db.commit()
-    await db.refresh(sig)
+    # Save signal to DB — non-blocking: return result even if DB write fails
+    signal_id = None
+    try:
+        levels = result.get("levels", {})
+        sig = BrainSignal(
+            user_id=user_id,
+            symbol=symbol,
+            timeframe=body.timeframe,
+            direction=result["signal"],
+            confidence=result["confidence"],
+            entry_price=levels.get("entry"),
+            stop_loss=levels.get("stop_loss"),
+            take_profit=levels.get("take_profit"),
+            risk_reward=levels.get("risk_reward"),
+            module_results=result.get("modules"),
+            ensemble_detail=result.get("ensemble"),
+        )
+        db.add(sig)
+        await db.commit()
+        await db.refresh(sig)
+        signal_id = str(sig.id)
+    except Exception:
+        pass  # DB unavailable — analysis result is still returned
 
-    return {**result, "signal_id": str(sig.id)}
+    return {**result, "signal_id": signal_id}
 
 
 @router.get("/history")
