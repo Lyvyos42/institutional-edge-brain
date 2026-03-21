@@ -1,10 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useGoogleLogin } from "@react-oauth/google";
-import { saveAuth } from "@/lib/auth";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { register, loginWithGoogle } from "@/lib/api";
 
 const C = {
   bg: "#06060f", surface: "#0d0d1a", border: "#1a1a2e",
@@ -18,58 +15,38 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirm,  setConfirm]  = useState("");
   const [error,    setError]    = useState("");
+  const [info,     setInfo]     = useState("");
   const [loading,  setLoading]  = useState(false);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
-    if (password.length < 8) { setError("Password must be at least 8 characters"); return; }
+    setError(""); setInfo("");
+    if (password.length < 6) { setError("Password must be at least 6 characters"); return; }
     if (password !== confirm) { setError("Passwords do not match"); return; }
     setLoading(true);
     try {
-      const res  = await fetch(`${API}/api/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.detail || "Registration failed"); return; }
-      saveAuth(data);
-      router.replace("/dashboard");
-    } catch (err: any) {
-      setError(`Connection error — cannot reach ${API} (${err?.message || "network failure"})`);
+      const { needsConfirmation } = await register(email, password);
+      if (needsConfirmation) {
+        setInfo("Account created! Check your email to confirm your address, then sign in.");
+      } else {
+        router.replace("/dashboard");
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
       setLoading(false);
     }
   };
 
-  const googleLogin = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
-      setError(""); setLoading(true);
-      try {
-        const infoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-          headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
-        });
-        if (!infoRes.ok) { setError("Google verification failed"); setLoading(false); return; }
-        const googleUser = await infoRes.json();
-
-        const res  = await fetch(`${API}/api/auth/google-token`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ access_token: tokenResponse.access_token, email: googleUser.email, sub: googleUser.sub }),
-        });
-        const data = await res.json();
-        if (!res.ok) { setError(data.detail || "Google sign-up failed"); return; }
-        saveAuth(data);
-        router.replace("/dashboard");
-      } catch (err: any) {
-        setError(`Google login error — cannot reach ${API} (${err?.message || "network failure"})`);
-      } finally {
-        setLoading(false);
-      }
-    },
-    onError: () => setError("Google sign-up cancelled or failed"),
-  });
+  const handleGoogle = async () => {
+    setError(""); setLoading(true);
+    try {
+      await loginWithGoogle();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Google sign-up failed");
+      setLoading(false);
+    }
+  };
 
   const inputStyle: React.CSSProperties = {
     width: "100%", background: C.bg, border: `1px solid ${C.border}`,
@@ -96,7 +73,7 @@ export default function RegisterPage() {
 
           {/* Google button */}
           <button
-            onClick={() => googleLogin()}
+            onClick={handleGoogle}
             disabled={loading}
             style={{ width: "100%", background: "#fff", border: "1px solid #dadce0", color: "#3c4043",
                      padding: "10px 16px", borderRadius: 6, cursor: "pointer", fontSize: 13,
@@ -107,7 +84,7 @@ export default function RegisterPage() {
               <path fill="#FBBC05" d="M3.964 10.706c-.18-.54-.282-1.117-.282-1.706s.102-1.166.282-1.706V4.962H.957C.347 6.175 0 7.55 0 9s.348 2.826.957 4.038l3.007-2.332z"/>
               <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.962L3.964 6.294C4.672 4.167 6.656 3.58 9 3.58z"/>
             </svg>
-            Sign up with Google
+            {loading ? "Redirecting…" : "Sign up with Google"}
           </button>
 
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
@@ -124,13 +101,16 @@ export default function RegisterPage() {
               </label>
             ))}
 
-            {error && <div style={{ color: C.red, fontSize: 12, marginBottom: 14, padding: "8px 12px", background: "#ff446611", borderRadius: 6, fontFamily: "monospace" }}>{error}</div>}
+            {error && <div style={{ color: C.red,   fontSize: 12, marginBottom: 14, padding: "8px 12px", background: "#ff446611", borderRadius: 6, fontFamily: "monospace" }}>{error}</div>}
+            {info  && <div style={{ color: C.green, fontSize: 12, marginBottom: 14, padding: "8px 12px", background: "#00c89611", borderRadius: 6, fontFamily: "monospace" }}>{info}</div>}
 
-            <button type="submit" disabled={loading}
-              style={{ width: "100%", background: C.accent, border: "none", color: "#fff", padding: "11px 0",
-                       borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "monospace", letterSpacing: 1, marginTop: 4 }}>
-              {loading ? "CREATING..." : "CREATE ACCOUNT"}
-            </button>
+            {!info && (
+              <button type="submit" disabled={loading}
+                style={{ width: "100%", background: C.accent, border: "none", color: "#fff", padding: "11px 0",
+                         borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "monospace", letterSpacing: 1, marginTop: 4 }}>
+                {loading ? "CREATING..." : "CREATE ACCOUNT"}
+              </button>
+            )}
           </form>
 
           <div style={{ textAlign: "center", marginTop: 24, fontFamily: "monospace", fontSize: 12, color: C.muted }}>

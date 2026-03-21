@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { analyze, type AnalysisResult } from "@/lib/api";
-import { getToken, getEmail as getStoredEmail, logout as doLogout } from "@/lib/auth";
+import { getToken, getEmail as getStoredEmail, logoutSync as doLogout } from "@/lib/auth";
 
 const SYMBOLS: Record<string, string[]> = {
   "Forex":   ["EURUSD","GBPUSD","USDJPY","AUDUSD","USDCAD","USDCHF","NZDUSD","EURGBP","EURJPY","GBPJPY"],
@@ -246,12 +246,17 @@ export default function Dashboard() {
   const [activityLog, setActivityLog] = useState<string[]>([]);
 
   useEffect(() => {
-    const token = getToken();
-    if (!token) {
-      router.replace("/login");
-      return;
-    }
-    setEmail(getStoredEmail());
+    // middleware handles redirect — this is a fallback for the first paint
+    import("@/lib/supabase").then(({ supabase }) => {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!session && !getToken()) {
+          router.replace("/login");
+          return;
+        }
+        const userEmail = session?.user?.email || getStoredEmail();
+        setEmail(userEmail);
+      });
+    });
   }, [router]);
 
   const addLog = useCallback((msg: string) => {

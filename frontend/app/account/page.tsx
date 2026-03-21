@@ -1,9 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { authFetch, getToken, getTier, logout } from "@/lib/auth";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { logoutSync as logout } from "@/lib/auth";
+import { getMe, changePassword as apiChangePassword } from "@/lib/api";
 
 const C = {
   bg: "#06060f", surface: "#0d0d1a", border: "#1a1a2e",
@@ -43,10 +42,8 @@ export default function AccountPage() {
   const [pwLoading, setPwLoading] = useState(false);
 
   useEffect(() => {
-    if (!getToken()) { router.replace("/login"); return; }
-    authFetch(`${API}/api/auth/me`)
-      .then(r => r.json())
-      .then((d: UserInfo) => setInfo(d))
+    getMe()
+      .then((d) => setInfo(d))
       .catch(() => { logout(); router.replace("/login"); })
       .finally(() => setLoading(false));
   }, [router]);
@@ -58,13 +55,7 @@ export default function AccountPage() {
     if (pwNew !== pwConfirm) { setPwError("Passwords do not match"); return; }
     setPwLoading(true);
     try {
-      const res = await authFetch(`${API}/api/auth/change-password`, {
-        method:  "PUT",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ current_password: pwCurrent, new_password: pwNew }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setPwError(data.detail || "Failed"); return; }
+      await apiChangePassword(pwCurrent, pwNew);
       setPwSuccess("Password changed. You'll be logged out shortly.");
       setPwCurrent(""); setPwNew(""); setPwConfirm("");
       setTimeout(() => { logout(); router.replace("/login"); }, 2000);
@@ -86,7 +77,7 @@ export default function AccountPage() {
     </div>
   );
 
-  const tier = info?.tier || getTier();
+  const tier = info?.tier || "free";
 
   const pwFields: { label: string; value: string; set: (v: string) => void }[] = [
     { label: "CURRENT PASSWORD", value: pwCurrent, set: setPwCurrent },

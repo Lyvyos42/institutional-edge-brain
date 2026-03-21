@@ -1,10 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useGoogleLogin } from "@react-oauth/google";
-import { saveAuth } from "@/lib/auth";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { login, loginWithGoogle, sendMagicLink } from "@/lib/api";
 
 const C = {
   bg: "#06060f", surface: "#0d0d1a", border: "#1a1a2e",
@@ -23,81 +20,41 @@ export default function LoginPage() {
   const [info,     setInfo]     = useState("");
   const [loading,  setLoading]  = useState(false);
 
-  // Password login
   const handlePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(""); setInfo("");
-    setLoading(true);
+    setError(""); setInfo(""); setLoading(true);
     try {
-      const res  = await fetch(`${API}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.detail || "Login failed"); return; }
-      saveAuth(data);
+      await login(email, password);
       router.replace("/dashboard");
-    } catch {
-      setError("Connection error");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Login failed");
     } finally {
       setLoading(false);
     }
   };
 
-  // Magic link request
   const handleMagic = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(""); setInfo("");
-    setLoading(true);
+    setError(""); setInfo(""); setLoading(true);
     try {
-      const res  = await fetch(`${API}/api/auth/magic-request`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.detail || "Failed"); return; }
+      await sendMagicLink(email);
       setInfo("Check your email — a login link has been sent. It expires in 15 minutes.");
-    } catch {
-      setError("Connection error");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to send link");
     } finally {
       setLoading(false);
     }
   };
 
-  // Google login
-  const googleLogin = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
-      setError(""); setLoading(true);
-      try {
-        // Exchange access_token for user info, then send credential to backend
-        // useGoogleLogin with flow="implicit" gives access_token, not id_token
-        // We need flow="auth-code" or use GoogleLogin component for id_token
-        // Here we use the access_token to get user info from Google
-        const infoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-          headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
-        });
-        if (!infoRes.ok) { setError("Google verification failed"); setLoading(false); return; }
-        const googleUser = await infoRes.json();
-
-        const res  = await fetch(`${API}/api/auth/google-token`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ access_token: tokenResponse.access_token, email: googleUser.email, sub: googleUser.sub }),
-        });
-        const data = await res.json();
-        if (!res.ok) { setError(data.detail || "Google login failed"); return; }
-        saveAuth(data);
-        router.replace("/dashboard");
-      } catch {
-        setError("Google login error");
-      } finally {
-        setLoading(false);
-      }
-    },
-    onError: () => setError("Google login cancelled or failed"),
-  });
+  const handleGoogle = async () => {
+    setError(""); setLoading(true);
+    try {
+      await loginWithGoogle(); // redirects to /auth/callback
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Google sign-in failed");
+      setLoading(false);
+    }
+  };
 
   const inputStyle: React.CSSProperties = {
     width: "100%", background: C.bg, border: `1px solid ${C.border}`,
@@ -127,7 +84,7 @@ export default function LoginPage() {
 
           {/* Google button */}
           <button
-            onClick={() => googleLogin()}
+            onClick={handleGoogle}
             disabled={loading}
             style={{ width: "100%", background: "#fff", border: "1px solid #dadce0", color: "#3c4043",
                      padding: "10px 16px", borderRadius: 6, cursor: "pointer", fontSize: 13,
@@ -138,7 +95,7 @@ export default function LoginPage() {
               <path fill="#FBBC05" d="M3.964 10.706c-.18-.54-.282-1.117-.282-1.706s.102-1.166.282-1.706V4.962H.957C.347 6.175 0 7.55 0 9s.348 2.826.957 4.038l3.007-2.332z"/>
               <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.962L3.964 6.294C4.672 4.167 6.656 3.58 9 3.58z"/>
             </svg>
-            Continue with Google
+            {loading ? "Redirecting…" : "Continue with Google"}
           </button>
 
           {/* Divider */}

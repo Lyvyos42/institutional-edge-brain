@@ -13,7 +13,7 @@ from app.models.user import User
 from app.auth.jwt import (
     hash_password, verify_password,
     create_access_token, generate_refresh_token, generate_reset_token,
-    hash_token, get_current_user,
+    hash_token, get_current_user, decode_token_async,
 )
 from app.auth.email import send_password_reset_email, send_magic_link_email
 
@@ -151,8 +151,19 @@ async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
 async def me(payload: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.id == payload["sub"]))
     user   = result.scalar_one_or_none()
+
+    # Auto-create user on first Supabase login
     if not user:
-        raise HTTPException(404, "User not found")
+        email = payload.get("email", "")
+        if not email:
+            raise HTTPException(404, "User not found")
+        user = User(
+            id=payload["sub"],
+            email=email,
+            hashed_password=None,
+        )
+        db.add(user)
+        await db.flush()
 
     today      = datetime.now(timezone.utc).date()
     daily_used = user.daily_analyses if user.daily_reset_date == today else 0

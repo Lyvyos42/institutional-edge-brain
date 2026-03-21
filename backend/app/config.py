@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     free_daily_limit:      int = 10
     google_client_id:      str = ""
     admin_secret:          str = ""
+    # Supabase — set SUPABASE_URL + SUPABASE_JWT_SECRET in Render env vars
+    supabase_url:          str = ""   # e.g. https://xxxx.supabase.co
+    supabase_jwt_secret:   str = ""   # optional legacy HS256 secret
 
     # kept for backward compat
     @property
