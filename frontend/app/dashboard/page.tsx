@@ -796,6 +796,7 @@ export default function Dashboard() {
         <div className="ieb-left no-scrollbar scan-overlay" style={{
           background:"rgba(0,0,0,0.4)", borderRight:"1px solid rgba(6,182,212,0.15)",
           overflowY:"auto", padding:"16px", display:"flex", flexDirection:"column", gap:14,
+          minHeight:0,
         }}>
           <div style={{ color:"#67e8f9", fontSize:"0.65rem", letterSpacing:"0.15em", fontFamily:"'Roboto Mono',monospace" }}>MARKET METRICS</div>
 
@@ -947,6 +948,7 @@ export default function Dashboard() {
           background:"radial-gradient(circle at center, rgba(6,182,212,0.1) 0%, rgba(6,182,212,0.03) 40%, transparent 70%)",
           borderLeft:"1px solid rgba(6,182,212,0.08)",
           borderRight:"1px solid rgba(6,182,212,0.08)",
+          minHeight:0, overflow:"hidden",
         }}>
           <NeuralCanvas result={result} running={running} />
 
@@ -981,7 +983,7 @@ export default function Dashboard() {
         {/* ── RIGHT: Module Analysis Feed ── */}
         <div className="ieb-right no-scrollbar" style={{
           background:"rgba(0,0,0,0.4)", borderLeft:"1px solid rgba(6,182,212,0.15)",
-          display:"flex", flexDirection:"column",
+          display:"flex", flexDirection:"column", minHeight:0,
         }}>
           <div style={{ padding:"12px 16px", borderBottom:"1px solid rgba(6,182,212,0.1)", display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
             <div style={{ width:6, height:6, borderRadius:"50%", background:"#4ade80", boxShadow:"0 0 8px #4ade80" }} />
